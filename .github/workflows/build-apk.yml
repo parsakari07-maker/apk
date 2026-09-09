@@ -13,6 +13,23 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Locate Project Root
+        id: find-root
+        run: |
+          if [ -f "package.json" ]; then
+            echo "ROOT_DIR=." >> $GITHUB_ENV
+          else
+            FOUND=$(find . -maxdepth 3 -name "package.json" | head -n 1)
+            if [ -n "$FOUND" ]; then
+              DIR=$(dirname "$FOUND")
+              echo "Found package.json in $DIR"
+              echo "ROOT_DIR=$DIR" >> $GITHUB_ENV
+            else
+              echo "ERROR: package.json not found in repository!"
+              exit 1
+            fi
+          fi
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -24,23 +41,28 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
-      - name: Install Capacitor & Dependencies
+      - name: Install Dependencies & Build Web Assets
+        working-directory: ${{ env.ROOT_DIR }}
         run: |
           npm install
           npm run build
-          npm install @capacitor/core @capacitor/cli @capacitor/android
+
+      - name: Setup Capacitor & Generate Android Project
+        working-directory: ${{ env.ROOT_DIR }}
+        run: |
+          npm install @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest
           npx cap init "LocalNet" "com.localnet.mesh" --web-dir dist
-          npx cap add android
+          npx cap add android || true
           npx cap sync android
 
       - name: Build APK with Gradle
+        working-directory: ${{ env.ROOT_DIR }}/android
         run: |
-          cd android
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleDebug --no-daemon
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: LocalNet-Android-APK
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: ${{ env.ROOT_DIR }}/android/app/build/outputs/apk/debug/app-debug.apk

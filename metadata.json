@@ -1,0 +1,6 @@
+{
+  "name": "Walkie-Talkie & Local CCTV Camera Monitor",
+  "description": "NetMaster Suite: Dual-mode offline local network Android application with 5 modules (Signal Radar, UDP Walkie-Talkie, CameraX CCTV with Stealth Mode, AirDrop file sharing, and Screen Mirroring) with Jetpack Compose and Vazirmatn Persian RTL UI.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

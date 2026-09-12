@@ -1,20 +1,20 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   ScreenShare,
-  Cast,
-  Tv,
   Play,
   Square,
   Volume2,
   VolumeX,
   Radio,
-  Smartphone,
   CheckCircle2,
   AlertCircle,
   ExternalLink,
   Layers,
-  ShieldAlert,
-  Sparkles
+  Smartphone,
+  Tv,
+  Cpu,
+  ShieldCheck,
+  Zap
 } from 'lucide-react';
 import { PeerDevice, UserProfile } from '../types';
 
@@ -29,7 +29,6 @@ interface ScreenMirrorTabProps {
 
 export const ScreenMirrorTab: React.FC<ScreenMirrorTabProps> = ({
   peers,
-  profile,
   isDark = true,
   isMirroring: externalIsMirroring,
   onToggleMirroring,
@@ -38,17 +37,17 @@ export const ScreenMirrorTab: React.FC<ScreenMirrorTabProps> = ({
   const [internalIsMirroring, setInternalIsMirroring] = useState(false);
   const isMirroring = externalIsMirroring !== undefined ? externalIsMirroring : internalIsMirroring;
 
-  const [quality, setQuality] = useState<'1080p' | '720p'>('1080p');
-  const [fps, setFps] = useState<'60' | '30'>('60');
-  const [includeAudio, setIncludeAudio] = useState(true);
-  const [permissionError, setPermissionError] = useState<string | null>(null);
+  const [fps, setFps] = useState<'30' | '60'>('30');
+  const [quality, setQuality] = useState<'720p' | '1080p'>('1080p');
+  const [includeAudio, setIncludeAudio] = useState(false);
   const [isRequestingPermission, setIsRequestingPermission] = useState(false);
+  const [permissionError, setPermissionError] = useState<string | null>(null);
   const [actualResolution, setActualResolution] = useState<{ width: number; height: number } | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
-  // Stop mirroring cleanup helper
+  // Stop mirroring
   const stopScreenMirroring = () => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
@@ -65,30 +64,40 @@ export const ScreenMirrorTab: React.FC<ScreenMirrorTabProps> = ({
     }
   };
 
-  // Start real screen broadcast requesting browser / OS MediaProjection display permission
+  // Start real Android screen broadcast via MediaProjection API (getDisplayMedia)
   const startScreenMirroring = async () => {
     setPermissionError(null);
     setIsRequestingPermission(true);
 
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-        throw new Error('قابلیت ضبط و اشتراک صفحه نمایش (getDisplayMedia) در این مرورگر یا محیط پشتیبانی نمی‌شود.');
+        throw new Error('سرویس ضبط صفحه نمایش اندروید (MediaProjection) در دسترس نیست.');
       }
 
-      // Request actual screen display permission from the user/OS
-      const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: {
-          displaySurface: 'monitor',
-          frameRate: { ideal: fps === '60' ? 60 : 30, max: 60 },
-          width: { ideal: quality === '1080p' ? 1920 : 1280 },
-          height: { ideal: quality === '1080p' ? 1080 : 720 },
-        },
-        audio: includeAudio,
-      });
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getDisplayMedia({
+          video: {
+            frameRate: { ideal: fps === '60' ? 60 : 30, max: 60 },
+            width: { ideal: quality === '1080p' ? 1920 : 1280 },
+            height: { ideal: quality === '1080p' ? 1080 : 720 },
+          },
+          audio: includeAudio,
+        });
+      } catch (firstErr: any) {
+        // Fallback with standard video constraints
+        if (includeAudio || firstErr?.name !== 'NotAllowedError') {
+          stream = await navigator.mediaDevices.getDisplayMedia({
+            video: true,
+            audio: false,
+          });
+        } else {
+          throw firstErr;
+        }
+      }
 
       streamRef.current = stream;
 
-      // Attach stream to video tag
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.play().catch(() => {});
@@ -100,8 +109,6 @@ export const ScreenMirrorTab: React.FC<ScreenMirrorTabProps> = ({
         if (settings.width && settings.height) {
           setActualResolution({ width: settings.width, height: settings.height });
         }
-
-        // Detect when user stops sharing from browser's native share bar
         videoTrack.onended = () => {
           stopScreenMirroring();
         };
@@ -113,18 +120,19 @@ export const ScreenMirrorTab: React.FC<ScreenMirrorTabProps> = ({
         setInternalIsMirroring(true);
       }
     } catch (err: any) {
-      console.error('Screen capture permission error:', err);
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        setPermissionError('دسترسی به پخش صفحه نمایش توسط کاربر لغو شد یا مجوز اشتراک صفحه صادر نگردید.');
-      } else {
-        setPermissionError(err.message || 'خطا در برقراری ارتباط با پخش صفحه نمایش.');
-      }
+      console.warn('Android MediaProjection screen capture permission notice:', err);
+      const isDenied = err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError';
+      setPermissionError(
+        isDenied
+          ? 'مجوز ضبط و اشتراک صفحه نمایش اندروید توسط کاربر یا سیستم لغو شد.'
+          : err?.message || 'خطا در راه‌اندازی سرویس پخش صفحه نمایش اندروید.'
+      );
     } finally {
       setIsRequestingPermission(false);
     }
   };
 
-  // Attach stream when videoRef mounts if stream is already running
+  // Sync stream with video element
   useEffect(() => {
     if (isMirroring && streamRef.current && videoRef.current) {
       videoRef.current.srcObject = streamRef.current;
@@ -165,19 +173,19 @@ export const ScreenMirrorTab: React.FC<ScreenMirrorTabProps> = ({
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-xs sm:text-sm font-extrabold flex items-center gap-1.5">
-              <span>اشتراک زنده صفحه نمایش (Screen Mirror)</span>
+              <span>اشتراک زنده صفحه نمایش اندروید (Screen Mirror)</span>
             </h2>
             <div className="flex items-center gap-1">
               <span className="text-[10px] bg-[#818CF8]/15 text-[#818CF8] px-2 py-0.5 rounded-full font-mono font-bold border border-[#818CF8]/30">
-                P2P {fps}FPS
+                MediaProjection {fps}FPS
               </span>
               <span className="text-[10px] bg-[#4CC9F0]/15 text-[#4CC9F0] px-2 py-0.5 rounded-full font-mono font-bold border border-[#4CC9F0]/30">
-                LAN RTSP
+                RTSP LAN
               </span>
             </div>
           </div>
           <p className={`text-[11px] mt-0.5 ${isDark ? 'text-[#94A3B8]' : 'text-slate-500'}`}>
-            پخش زنده واقعی تصویر صفحه نمایش در شبکه محلی بدون اینترنت
+            پخش زنده تصویر صفحه گوشی اندروید در شبکه محلی بدون اینترنت
           </p>
         </div>
 
@@ -186,22 +194,20 @@ export const ScreenMirrorTab: React.FC<ScreenMirrorTabProps> = ({
         </div>
       </div>
 
-      {/* Permission Warning / Error Banner if denied */}
+      {/* Android System Permission Alert */}
       {permissionError && (
-        <div className="p-3.5 bg-red-500/10 border border-red-500/30 rounded-2xl flex items-start gap-3 text-xs text-red-300 shadow-lg animate-fadeIn">
-          <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
-          <div className="flex-1 space-y-1.5">
-            <div className="font-bold text-white text-xs">نیاز به دریافت مجوز پخش صفحه نمایش</div>
-            <p className="text-[11px] text-red-200 leading-relaxed">{permissionError}</p>
-            <button
-              onClick={startScreenMirroring}
-              disabled={isRequestingPermission}
-              className="mt-1 px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-white border border-red-500/40 rounded-xl font-bold text-[11px] transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-            >
-              <Play className="w-3 h-3 fill-current" />
-              <span>درخواست مجدد مجوز پخش صفحه</span>
-            </button>
+        <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-2xl flex items-center justify-between gap-3 text-xs text-red-200 shadow-md animate-fadeIn">
+          <div className="flex items-center gap-2.5">
+            <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+            <span className="text-[11px] font-medium leading-relaxed">{permissionError}</span>
           </div>
+          <button
+            onClick={startScreenMirroring}
+            disabled={isRequestingPermission}
+            className="px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-200 border border-red-500/40 rounded-xl font-bold text-[11px] transition-colors shrink-0 cursor-pointer"
+          >
+            درخواست مجدد
+          </button>
         </div>
       )}
 
@@ -219,7 +225,9 @@ export const ScreenMirrorTab: React.FC<ScreenMirrorTabProps> = ({
               }`}
             />
             <span className="text-xs font-bold">
-              {isMirroring ? 'در حال پخش زنده صفحه نمایش (MediaStream Active)' : 'اشتراک صفحه غیرفعال است'}
+              {isMirroring
+                ? 'در حال پخش زنده صفحه نمایش اندروید (Foreground MediaProjection Active)'
+                : 'اشتراک صفحه غیرفعال است'}
             </span>
           </div>
 
@@ -257,7 +265,6 @@ export const ScreenMirrorTab: React.FC<ScreenMirrorTabProps> = ({
         <div className="relative w-full h-56 sm:h-64 rounded-xl overflow-hidden bg-[#0A0C10] border border-[#262C38] flex flex-col items-center justify-center">
           {isMirroring ? (
             <div className="relative w-full h-full flex items-center justify-center bg-black">
-              {/* Actual Live Video element attached to getDisplayMedia MediaStream */}
               <video
                 ref={videoRef}
                 autoPlay
@@ -282,14 +289,14 @@ export const ScreenMirrorTab: React.FC<ScreenMirrorTabProps> = ({
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center p-6 text-center space-y-2">
-              <div className="w-14 h-14 rounded-2xl bg-[#111318] border border-[#262C38] flex items-center justify-center text-[#70A5D8] shadow-inner">
+              <div className="w-14 h-14 rounded-2xl bg-[#111318] border border-[#262C38] flex items-center justify-center text-[#818CF8] shadow-inner">
                 <Tv className="w-7 h-7 opacity-75" />
               </div>
               <div className="text-xs font-bold text-white">
-                صفحه نمایش آماده پخش است
+                صفحه نمایش گوشی آماده اشتراک است
               </div>
               <p className={`text-[11px] max-w-sm leading-relaxed ${isDark ? 'text-[#94A3B8]' : 'text-slate-500'}`}>
-                با فشردن دکمه زیر، مرورگر از شما مجوز پخش صفحه نمایش (کل صفحه یا پنجره برنامه) را درخواست خواهد کرد.
+                با فشردن دکمه زیر، پخش تصویر صفحه نمایش گوشی اندروید در شبکه محلی بدون نیاز به اینترنت آغاز می‌شود.
               </p>
             </div>
           )}
@@ -308,7 +315,7 @@ export const ScreenMirrorTab: React.FC<ScreenMirrorTabProps> = ({
               }`}
             >
               {includeAudio ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
-              <span className="text-[10px] font-bold">{includeAudio ? 'انتقال صدای سیستم' : 'بدون صدا'}</span>
+              <span className="text-[10px] font-bold">{includeAudio ? 'انتقال صدای داخلی گوشی' : 'بدون صدا'}</span>
             </button>
 
             <button
@@ -323,7 +330,7 @@ export const ScreenMirrorTab: React.FC<ScreenMirrorTabProps> = ({
               {isRequestingPermission ? (
                 <>
                   <span className="w-3.5 h-3.5 border-2 border-[#111318] border-t-transparent rounded-full animate-spin" />
-                  <span>در حال دریافت مجوز...</span>
+                  <span>در حال فعال‌سازی مجوز...</span>
                 </>
               ) : isMirroring ? (
                 <>
@@ -333,7 +340,7 @@ export const ScreenMirrorTab: React.FC<ScreenMirrorTabProps> = ({
               ) : (
                 <>
                   <Play className="w-3.5 h-3.5 fill-current" />
-                  <span>درخواست مجوز و شروع پخش</span>
+                  <span>شروع پخش صفحه گوشی</span>
                 </>
               )}
             </button>
@@ -347,7 +354,7 @@ export const ScreenMirrorTab: React.FC<ScreenMirrorTabProps> = ({
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                 <span className="text-emerald-300 font-bold text-[11px]">
-                  پخش در پس‌زمینه فعال است (سرویس Foreground و انتقال استریم P2P فعال)
+                  سرویس پس‌زمینه اندروید (Foreground Service + MediaProjection) فعال است
                 </span>
               </div>
 

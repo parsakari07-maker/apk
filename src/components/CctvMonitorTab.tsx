@@ -158,7 +158,7 @@ export const CctvMonitorTab: React.FC<CctvMonitorTabProps> = ({
     setCameraError(null);
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error('قابلیت دسترسی به دوربین در این دستگاه/مرورگر موجود نیست.');
+        throw new Error('قابلیت دسترسی به دوربین در این دستگاه موجود نیست.');
       }
       const constraints: MediaStreamConstraints = {
         video: {
@@ -175,7 +175,7 @@ export const CctvMonitorTab: React.FC<CctvMonitorTabProps> = ({
       console.warn('Camera permission or device error:', err);
       const isDenied = err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError';
       const errorMsg = isDenied
-        ? 'دسترسی به دوربین رد شد. لطفاً روی آیکون قفل در نوار آدرس کلیک کرده و دسترسی دوربین را فعال کنید.'
+        ? 'دسترسی به دوربین توسط کاربر یا تنظیمات دستگاه رد شد. لطفاً مجوز دوربین را در تنظیمات اندروید فعال کنید.'
         : err?.message || 'امکان اتصال به دوربین دستگاه وجود ندارد.';
       setCameraError(errorMsg);
     }

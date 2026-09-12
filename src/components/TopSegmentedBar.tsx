@@ -88,31 +88,34 @@ export const TopSegmentedBar: React.FC<TopSegmentedBarProps> = ({
           </span>
         </div>
 
-        {/* Right side: QR, Architecture, Settings */}
+        {/* Right side: Connection Hub, Architecture, Settings */}
         <div className="flex items-center gap-1.5">
           {onOpenQR && (
             <button
               onClick={onOpenQR}
-              className={`w-7 h-7 rounded-full border flex items-center justify-center text-[#70A5D8] transition-all shadow-sm ${
+              className={`h-7 px-2.5 rounded-full border flex items-center gap-1.5 text-[#4CC9F0] transition-all shadow-sm cursor-pointer ${
                 isDark
                   ? 'bg-[#1B1F28] hover:bg-[#262C38] border-[#262C38] hover:border-[#4CC9F0]/40'
                   : 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-sky-600'
               }`}
-              title="اتصال با بارکد QR"
+              title="اتصال به دستگاه‌ها (IP مستقیم / پویش شبکه / بارکد QR)"
             >
               <QrCode className="w-3.5 h-3.5" />
+              <span className="text-[10px] font-bold">
+                {peerCount > 0 ? `${peerCount} دستگاه` : 'اتصال دستگاه'}
+              </span>
             </button>
           )}
 
           {onOpenArchitecture && (
             <button
               onClick={onOpenArchitecture}
-              className={`w-7 h-7 rounded-full border flex items-center justify-center text-[#818CF8] transition-all shadow-sm ${
+              className={`w-7 h-7 rounded-full border flex items-center justify-center text-[#818CF8] transition-all shadow-sm cursor-pointer ${
                 isDark
                   ? 'bg-[#1B1F28] hover:bg-[#262C38] border-[#262C38] hover:border-[#818CF8]/40'
                   : 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-indigo-600'
               }`}
-              title="مستندات و معماری سیستم"
+              title="مستندات معماری سیستم"
             >
               <Network className="w-3.5 h-3.5" />
             </button>
@@ -151,7 +154,7 @@ export const TopSegmentedBar: React.FC<TopSegmentedBarProps> = ({
             <button
               key={tab.id}
               onClick={() => onTabChange(tab.id)}
-              className={`relative flex flex-col items-center justify-center py-2 rounded-xl text-center transition-all duration-200 z-10 ${
+              className={`relative flex flex-col items-center justify-center py-1.5 sm:py-2 rounded-xl text-center transition-all duration-200 z-10 cursor-pointer ${
                 isActive
                   ? isDark
                     ? 'text-white'
@@ -173,7 +176,7 @@ export const TopSegmentedBar: React.FC<TopSegmentedBarProps> = ({
                 />
               )}
               <Icon
-                className={`w-4 h-4 mb-1 transition-all ${
+                className={`w-3.5 h-3.5 sm:w-4 sm:h-4 mb-0.5 sm:mb-1 transition-all ${
                   isActive
                     ? 'text-[#4CC9F0] scale-110 drop-shadow-[0_0_8px_rgba(76,201,240,0.4)]'
                     : isDark
@@ -182,7 +185,7 @@ export const TopSegmentedBar: React.FC<TopSegmentedBarProps> = ({
                 }`}
               />
               <span
-                className={`text-[10px] leading-tight ${
+                className={`text-[9px] sm:text-[10px] leading-tight truncate px-0.5 ${
                   isActive
                     ? isDark
                       ? 'font-bold text-white'

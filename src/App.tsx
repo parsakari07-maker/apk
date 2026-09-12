@@ -241,6 +241,7 @@ export default function App() {
                 onToggleSpeakerMode={() =>
                   setProfile((prev) => ({ ...prev, speakerModeOnly: !prev.speakerModeOnly }))
                 }
+                onOpenConnect={() => setIsQRModalOpen(true)}
                 isDark={isDark}
               />
             </div>
@@ -341,7 +342,7 @@ export default function App() {
         onClose={() => setIsArchModalOpen(false)}
       />
 
-      {/* QR Code Quick Connect Modal */}
+      {/* Connection Hub (Direct IP, LAN Scan, QR) */}
       <QRConnectionModal
         isOpen={isQRModalOpen}
         onClose={() => setIsQRModalOpen(false)}
@@ -349,7 +350,7 @@ export default function App() {
         hostIp={profile.localIp}
         hostPort={8888}
         hostName={profile.username}
-        onAddPeerFromQR={(newPeer) => {
+        onAddPeer={(newPeer) => {
           setPeers((prev) => {
             const exists = prev.some((p) => p.ip === newPeer.ip);
             if (exists) return prev;
@@ -362,20 +363,20 @@ export default function App() {
             if (exists) return prev;
             return [
               {
-                id: `peer-scanned-${Date.now()}`,
-                name: `${name} (اتصال QR)`,
+                id: `peer-${Date.now()}`,
+                name,
                 ip,
                 port,
-                battery: 88,
-                rssi: -50,
+                battery: 100,
+                rssi: -45,
                 isOnline: true,
                 isTalking: false,
-                role: 'host',
+                role: 'client',
                 cameraAvailable: true,
                 isStreamingCamera: false,
                 cameraFacing: 'back',
                 torchActive: false,
-                streamFps: 25,
+                streamFps: 30,
                 lastSeen: Date.now(),
               },
               ...prev,

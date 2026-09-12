@@ -20,6 +20,22 @@ class BackgroundServiceManager {
     return this.wakeLockSentinel !== null && !this.wakeLockSentinel.released;
   }
 
+  // Acquire wake lock directly
+  public async acquireWakeLock(): Promise<boolean> {
+    try {
+      if (typeof navigator !== 'undefined' && 'wakeLock' in navigator) {
+        this.wakeLockSentinel = await (navigator as any).wakeLock.request('screen');
+        this.wakeLockSentinel.addEventListener('release', () => {
+          this.wakeLockSentinel = null;
+        });
+        return true;
+      }
+    } catch (e) {
+      console.warn('WakeLock request failed:', e);
+    }
+    return false;
+  }
+
   // Request full background execution permissions: Notifications + Screen WakeLock
   public async requestBackgroundPermissions(): Promise<{
     notificationGranted: boolean;

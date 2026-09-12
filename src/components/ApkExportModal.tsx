@@ -284,16 +284,16 @@ export const ApkExportModal: React.FC<ApkExportModalProps> = ({
 
               <ol className="space-y-2.5 text-xs text-[#D1D5DB] leading-relaxed list-decimal list-inside">
                 <li className="p-3 rounded-2xl bg-[#141722] border border-[#1E2232]">
-                  آدرس این برنامه را در مرورگر <strong>Chrome</strong> گوشی خود باز کنید.
+                  آدرس این برنامه را در دستگاه اندروید خود باز کنید.
                 </li>
                 <li className="p-3 rounded-2xl bg-[#141722] border border-[#1E2232]">
-                  منوی ۳ نقطه بالای کروم را بزنید.
+                  منوی گزینه‌ها را بزنید.
                 </li>
                 <li className="p-3 rounded-2xl bg-[#141722] border border-[#1E2232]">
                   گزینه <strong>«نصب برنامه» (Install app)</strong> یا <strong>«افزودن به صفحه اصلی»</strong> را انتخاب کنید.
                 </li>
                 <li className="p-3 rounded-2xl bg-[#141722] border border-[#1E2232]">
-                  آیکون برنامه روی صفحه گوشی شما مانند یک اپ واقعی ظاهر می‌شود و به‌صورت تمام‌صفحه و با دسترسی به وب‌کم، میکروفون و ویبره کار خواهد کرد!
+                  برنامه روی دستگاه اندروید نصب شده و دسترسی کامل سخت‌افزاری فعال می‌شود.
                 </li>
               </ol>
             </div>

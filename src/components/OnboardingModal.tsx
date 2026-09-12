@@ -234,7 +234,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                   setUsername(e.target.value);
                   if (errorText) setErrorText('');
                 }}
-                placeholder="مثلاً: پارسا، فرمانده، ایستگاه ۱..."
+                placeholder="مثلاً: ایستگاه ۱، فرمانده..."
                 maxLength={24}
                 autoFocus
                 required
@@ -248,11 +248,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
               <span className="text-[11px] text-red-400 mt-1 block font-medium">
                 {errorText}
               </span>
-            ) : (
-              <span className="text-[10px] text-[#94A3B8] mt-1 block">
-                این شناسه به عنوان نام دستگاه شما در بیسیم و مانیتورینگ نمایش داده می‌شود.
-              </span>
-            )}
+            ) : null}
           </div>
 
           {/* Real Permission Request Action Cards */}

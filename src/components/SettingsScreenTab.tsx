@@ -144,7 +144,7 @@ export const SettingsScreenTab: React.FC<SettingsScreenTabProps> = ({
               type="text"
               value={usernameInput}
               onChange={(e) => setUsernameInput(e.target.value)}
-              placeholder="مثال: پارسا (فرمانده)"
+              placeholder="مثال: ایستگاه ۱ (فرمانده)"
               className={`flex-1 px-3 py-2 text-xs rounded-xl border transition-all focus:outline-none ${
                 isDark
                   ? 'bg-[#111318] border-[#262C38] text-white focus:border-[#4CC9F0]'

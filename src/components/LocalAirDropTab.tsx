@@ -271,45 +271,34 @@ export const LocalAirDropTab: React.FC<LocalAirDropTabProps> = ({
         </div>
       </div>
 
-      {/* Storage Access Permission Bar */}
-      <div className="px-3 pt-2.5 shrink-0">
-        <div className="p-2.5 bg-[#0E1524] border border-[#1E2638] rounded-xl flex items-center justify-between text-xs">
-          <div className="flex items-center gap-2">
-            <HardDrive className="w-4 h-4 text-[#4CC9F0] shrink-0" />
-            <div>
-              <div className="font-bold text-[11px] text-white flex items-center gap-1.5">
-                <span>مجوز دسترسی به فایل‌های حافظه (Storage Access)</span>
-                {storagePermission === 'granted' ? (
-                  <span className="text-[10px] px-1.5 py-0.2 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-md font-bold">
-                    تأیید شده
-                  </span>
-                ) : (
+      {/* Storage Access Permission Bar - Only shown until granted */}
+      {storagePermission !== 'granted' && (
+        <div className="px-3 pt-2.5 shrink-0">
+          <div className="p-2.5 bg-[#0E1524] border border-[#1E2638] rounded-xl flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2">
+              <HardDrive className="w-4 h-4 text-[#4CC9F0] shrink-0" />
+              <div>
+                <div className="font-bold text-[11px] text-white flex items-center gap-1.5">
+                  <span>مجوز دسترسی به فایل‌های حافظه (Storage Access)</span>
                   <span className="text-[10px] px-1.5 py-0.2 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-md font-bold">
                     نیاز به مجوز
                   </span>
-                )}
+                </div>
+                <p className="text-[10px] text-[#8B95A8] mt-0.5">
+                  برای اشتراک فایل در شبکه و ارسال فایل در چت، مجوز دسترسی لازم است.
+                </p>
               </div>
-              <p className="text-[10px] text-[#8B95A8] mt-0.5">
-                برای اشتراک فایل در شبکه و ارسال فایل در چت، مجوز دسترسی لازم است.
-              </p>
             </div>
-          </div>
 
-          {storagePermission !== 'granted' ? (
             <button
               onClick={handleGrantPermission}
               className="px-2.5 py-1 bg-[#4CC9F0]/20 hover:bg-[#4CC9F0]/30 text-[#4CC9F0] border border-[#4CC9F0]/40 rounded-lg text-[10px] font-bold transition-colors shrink-0 cursor-pointer"
             >
               تأیید مجوز دسترسی
             </button>
-          ) : (
-            <div className="flex items-center gap-1 text-emerald-400 text-[10px] font-bold shrink-0">
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>مجوز فعال است</span>
-            </div>
-          )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Main Panel Content */}
       {subTab === 'chat' ? (

@@ -116,7 +116,7 @@ export const ArchitectureModal: React.FC<ArchitectureModalProps> = ({ isOpen, on
               <div className="flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 text-[#3A86FF] shrink-0 mt-0.5" />
                 <span>
-                  <strong>سرور داخلی Ktor Netty:</strong> استریم چندبخشی `multipart/x-mixed-replace` با هدرهای استاندارد وب، سازگار با انواع پلیرهای ویدیویی، مرورگرها و کدهای کاتلین.
+                  <strong>سرور داخلی Ktor Netty:</strong> استریم چندبخشی `multipart/x-mixed-replace` با استانداردهای شبکه محلی، سازگار با انواع پلیرهای ویدیویی، کلاینت‌های متصل و کدهای کاتلین.
                 </span>
               </div>
               <div className="flex items-start gap-2">

@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { PeerDevice, UserProfile } from '../types';
 import { playPttStartSound, playRogerBeep } from '../audio/walkieTalkieAudio';
+import { checkSystemPermissions } from '../utils/systemPermissions';
 
 interface WalkieTalkieTabProps {
   peers: PeerDevice[];
@@ -102,6 +103,13 @@ export const WalkieTalkieTab: React.FC<WalkieTalkieTabProps> = ({
   };
 
   useEffect(() => {
+    // Check if mic permission is already granted so helper box disappears immediately
+    checkSystemPermissions().then((status) => {
+      if (status.microphone === 'granted') {
+        setMicPermission('granted');
+      }
+    }).catch(() => {});
+
     return () => {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       if (audioContextRef.current) audioContextRef.current.close();

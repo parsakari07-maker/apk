@@ -20,6 +20,7 @@ interface RadarCompassTabProps {
   onKickPeer: (peerId: string) => void;
   onToggleMutePeer: (peerId: string) => void;
   onToggleSpeakerMode: () => void;
+  onOpenConnect?: () => void;
   isDark?: boolean;
 }
 
@@ -28,6 +29,7 @@ export const RadarCompassTab: React.FC<RadarCompassTabProps> = ({
   profile,
   onKickPeer,
   onToggleMutePeer,
+  onOpenConnect,
   isDark = true,
 }) => {
   const [heading, setHeading] = useState(42);
@@ -309,7 +311,7 @@ export const RadarCompassTab: React.FC<RadarCompassTabProps> = ({
 
         {peers.length === 0 ? (
           <div
-            className={`p-4 rounded-xl border border-dashed text-center text-xs space-y-1.5 ${
+            className={`p-4 rounded-xl border border-dashed text-center text-xs space-y-2 ${
               isDark
                 ? 'bg-[#141A26]/50 border-[#262C38] text-slate-400'
                 : 'bg-slate-50 border-slate-200 text-slate-500'
@@ -318,8 +320,16 @@ export const RadarCompassTab: React.FC<RadarCompassTabProps> = ({
             <Crosshair className="w-5 h-5 mx-auto text-[#4CC9F0] opacity-60 animate-pulse" />
             <div className="font-medium text-[11px]">هیچ دستگاه دیگری در رادار محلی کشف نشده است</div>
             <div className="text-[10px] text-slate-500">
-              به محض اتصال گوشی دیگر به این Wi-Fi یا هات‌اسپات، موقعیت آن نمایان می‌شود
+              برای برقراری ارتباط سریع، آدرس IP دستگاه مقصد را وارد کنید
             </div>
+            {onOpenConnect && (
+              <button
+                onClick={onOpenConnect}
+                className="mt-1 px-3 py-1.5 bg-[#4CC9F0] hover:bg-[#4CC9F0]/90 text-[#0E121A] font-extrabold rounded-xl text-[11px] inline-flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+              >
+                <span>اتصال به دستگاه جدید (IP / پویش)</span>
+              </button>
+            )}
           </div>
         ) : (
           peers.map((peer) => {

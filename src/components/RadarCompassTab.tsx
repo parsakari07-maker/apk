@@ -307,46 +307,62 @@ export const RadarCompassTab: React.FC<RadarCompassTabProps> = ({
           <span className="text-[10px] font-mono text-[#70A5D8]">نرخ چرخش: ۱۵ RPM</span>
         </div>
 
-        {peers.map((peer) => {
-          const band = getDistanceBand(peer.rssi);
-          return (
-            <div
-              key={peer.id}
-              onClick={() => setSelectedPeer(peer)}
-              className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
-                selectedPeer?.id === peer.id
-                  ? isDark
-                    ? 'bg-[#1B1F28] border-[#4CC9F0] shadow-md shadow-[#4CC9F0]/10'
-                    : 'bg-sky-50 border-sky-400 shadow-sm'
-                  : isDark
-                  ? 'bg-[#1B1F28]/60 hover:bg-[#1B1F28] border-[#262C38]'
-                  : 'bg-white hover:bg-slate-50 border-slate-200'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <span
-                  className="w-2.5 h-2.5 rounded-full"
-                  style={{ backgroundColor: band.color }}
-                />
-                <span className={`text-xs font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                  {peer.name}
-                </span>
-                <span className={`text-[10px] font-mono ${isDark ? 'text-[#94A3B8]' : 'text-slate-500'}`}>
-                  {peer.ip}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-mono text-[#4CC9F0] font-bold">
-                  {band.rangeMeters}
-                </span>
-                <span className={`text-[10px] ${isDark ? 'text-[#94A3B8]' : 'text-slate-500'}`}>
-                  باتری: {peer.battery}٪
-                </span>
-              </div>
+        {peers.length === 0 ? (
+          <div
+            className={`p-4 rounded-xl border border-dashed text-center text-xs space-y-1.5 ${
+              isDark
+                ? 'bg-[#141A26]/50 border-[#262C38] text-slate-400'
+                : 'bg-slate-50 border-slate-200 text-slate-500'
+            }`}
+          >
+            <Crosshair className="w-5 h-5 mx-auto text-[#4CC9F0] opacity-60 animate-pulse" />
+            <div className="font-medium text-[11px]">هیچ دستگاه دیگری در رادار محلی کشف نشده است</div>
+            <div className="text-[10px] text-slate-500">
+              به محض اتصال گوشی دیگر به این Wi-Fi یا هات‌اسپات، موقعیت آن نمایان می‌شود
             </div>
-          );
-        })}
+          </div>
+        ) : (
+          peers.map((peer) => {
+            const band = getDistanceBand(peer.rssi);
+            return (
+              <div
+                key={peer.id}
+                onClick={() => setSelectedPeer(peer)}
+                className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
+                  selectedPeer?.id === peer.id
+                    ? isDark
+                      ? 'bg-[#1B1F28] border-[#4CC9F0] shadow-md shadow-[#4CC9F0]/10'
+                      : 'bg-sky-50 border-sky-400 shadow-sm'
+                    : isDark
+                    ? 'bg-[#1B1F28]/60 hover:bg-[#1B1F28] border-[#262C38]'
+                    : 'bg-white hover:bg-slate-50 border-slate-200'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full"
+                    style={{ backgroundColor: band.color }}
+                  />
+                  <span className={`text-xs font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                    {peer.name}
+                  </span>
+                  <span className={`text-[10px] font-mono ${isDark ? 'text-[#94A3B8]' : 'text-slate-500'}`}>
+                    {peer.ip}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono text-[#4CC9F0] font-bold">
+                    {band.rangeMeters}
+                  </span>
+                  <span className={`text-[10px] ${isDark ? 'text-[#94A3B8]' : 'text-slate-500'}`}>
+                    باتری: {peer.battery}٪
+                  </span>
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
     </div>
   );

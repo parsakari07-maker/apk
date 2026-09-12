@@ -8,7 +8,8 @@ import {
   QrCode,
   Compass,
   MessageSquare,
-  ScreenShare
+  ScreenShare,
+  Network
 } from 'lucide-react';
 import { AppTab } from '../types';
 
@@ -19,6 +20,7 @@ interface TopSegmentedBarProps {
   onOpenSettings: () => void;
   onOpenQR?: () => void;
   onOpenApkGuide?: () => void;
+  onOpenArchitecture?: () => void;
   networkSsid: string;
   myRole: 'host' | 'client';
   isDark?: boolean;
@@ -38,6 +40,7 @@ export const TopSegmentedBar: React.FC<TopSegmentedBarProps> = ({
   peerCount,
   onOpenSettings,
   onOpenQR,
+  onOpenArchitecture,
   networkSsid,
   myRole,
   isDark = true,
@@ -85,7 +88,7 @@ export const TopSegmentedBar: React.FC<TopSegmentedBarProps> = ({
           </span>
         </div>
 
-        {/* Right side: QR Code icon and EXACTLY ONE Settings gear icon beside it */}
+        {/* Right side: QR, Architecture, Settings */}
         <div className="flex items-center gap-1.5">
           {onOpenQR && (
             <button
@@ -98,6 +101,20 @@ export const TopSegmentedBar: React.FC<TopSegmentedBarProps> = ({
               title="اتصال با بارکد QR"
             >
               <QrCode className="w-3.5 h-3.5" />
+            </button>
+          )}
+
+          {onOpenArchitecture && (
+            <button
+              onClick={onOpenArchitecture}
+              className={`w-7 h-7 rounded-full border flex items-center justify-center text-[#818CF8] transition-all shadow-sm ${
+                isDark
+                  ? 'bg-[#1B1F28] hover:bg-[#262C38] border-[#262C38] hover:border-[#818CF8]/40'
+                  : 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-indigo-600'
+              }`}
+              title="مستندات و معماری سیستم"
+            >
+              <Network className="w-3.5 h-3.5" />
             </button>
           )}
 

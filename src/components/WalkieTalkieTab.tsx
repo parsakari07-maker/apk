@@ -20,7 +20,8 @@ import {
   Sliders,
   Activity,
   BatteryMedium,
-  Headphones
+  Headphones,
+  AlertCircle
 } from 'lucide-react';
 import { PeerDevice, UserProfile } from '../types';
 import { playPttStartSound, playRogerBeep } from '../audio/walkieTalkieAudio';
@@ -33,7 +34,6 @@ interface WalkieTalkieTabProps {
   onChannelChange?: (ch: number) => void;
   onAddCustomPeer?: (peer: PeerDevice) => void;
   onClearPeers?: () => void;
-  onResetSamplePeers?: () => void;
 }
 
 export const WalkieTalkieTab: React.FC<WalkieTalkieTabProps> = ({
@@ -43,7 +43,6 @@ export const WalkieTalkieTab: React.FC<WalkieTalkieTabProps> = ({
   onSetActiveSpeaker,
   onAddCustomPeer,
   onClearPeers,
-  onResetSamplePeers,
 }) => {
   const [isPttPressed, setIsPttPressed] = useState(false);
   const [isHandsFreeLocked, setIsHandsFreeLocked] = useState(false);
@@ -58,12 +57,21 @@ export const WalkieTalkieTab: React.FC<WalkieTalkieTabProps> = ({
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animFrameRef = useRef<number | null>(null);
 
-  // Request browser microphone for live waveform analysis
-  const requestRealMic = async () => {
+  // Request browser microphone for live waveform analysis & trigger Android RECORD_AUDIO runtime permission
+  const requestRealMic = async (): Promise<boolean> => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: noiseReduction,
+          autoGainControl: true,
+        },
+      });
       const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       const ctx = new AudioCtxClass();
+      if (ctx.state === 'suspended') {
+        await ctx.resume();
+      }
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 64;
       const source = ctx.createMediaStreamSource(stream);
@@ -85,9 +93,11 @@ export const WalkieTalkieTab: React.FC<WalkieTalkieTabProps> = ({
         animFrameRef.current = requestAnimationFrame(updateMeter);
       };
       updateMeter();
+      return true;
     } catch (err) {
-      console.warn('Microphone permission not granted', err);
+      console.warn('Microphone permission not granted or hardware unavailable', err);
       setMicPermission('denied');
+      return false;
     }
   };
 
@@ -99,10 +109,19 @@ export const WalkieTalkieTab: React.FC<WalkieTalkieTabProps> = ({
   }, []);
 
   // Handle PTT Press (Hold to talk)
-  const handlePttDown = () => {
+  const handlePttDown = async () => {
     if (activeSpeakerId && activeSpeakerId !== 'me') {
       return;
     }
+
+    // Trigger Android microphone runtime permission immediately on first press if not granted
+    if (micPermission !== 'granted') {
+      const granted = await requestRealMic();
+      if (!granted) {
+        return;
+      }
+    }
+
     setIsPttPressed(true);
     onSetActiveSpeaker('me');
     playPttStartSound();
@@ -126,7 +145,7 @@ export const WalkieTalkieTab: React.FC<WalkieTalkieTabProps> = ({
   };
 
   // Toggle Hands-Free Lock mode (like Zello lock)
-  const toggleHandsFreeLock = () => {
+  const toggleHandsFreeLock = async () => {
     if (isHandsFreeLocked) {
       // Unlock and stop talking
       setIsHandsFreeLocked(false);
@@ -134,6 +153,10 @@ export const WalkieTalkieTab: React.FC<WalkieTalkieTabProps> = ({
       onSetActiveSpeaker(null);
       playRogerBeep();
     } else {
+      if (micPermission !== 'granted') {
+        const granted = await requestRealMic();
+        if (!granted) return;
+      }
       // Lock open mic
       setIsHandsFreeLocked(true);
       setIsPttPressed(true);
@@ -308,13 +331,28 @@ export const WalkieTalkieTab: React.FC<WalkieTalkieTabProps> = ({
         <div className="p-2.5 bg-[#0D121F] border border-[#1E2638] rounded-xl flex items-center justify-between text-[11px] shrink-0">
           <span className="text-[#8B95A8] flex items-center gap-1.5">
             <Mic className="w-3.5 h-3.5 text-[#00F59B]" />
-            امواج زنده صدای میکروفون سیستم فعال شود؟
+            دسترسی به میکروفون برای ارسال صدا
           </span>
           <button
-            onClick={requestRealMic}
-            className="bg-[#00F59B]/15 hover:bg-[#00F59B]/25 text-[#00F59B] px-3 py-1 rounded-lg transition-all border border-[#00F59B]/30 font-bold"
+            onClick={() => requestRealMic()}
+            className="bg-[#00F59B]/15 hover:bg-[#00F59B]/25 text-[#00F59B] px-3 py-1 rounded-lg transition-all border border-[#00F59B]/30 font-bold cursor-pointer"
           >
-            اتصال میکروفون
+            تأیید مجوز میکروفون
+          </button>
+        </div>
+      )}
+
+      {micPermission === 'denied' && (
+        <div className="p-2.5 bg-red-950/40 border border-red-800/50 rounded-xl flex items-center justify-between text-[11px] shrink-0">
+          <span className="text-red-300 flex items-center gap-1.5">
+            <AlertCircle className="w-3.5 h-3.5 text-red-400 shrink-0" />
+            مجوز میکروفون داده نشد. برای ارسال صدا در بیسیم، دسترسی لازم است.
+          </span>
+          <button
+            onClick={() => requestRealMic()}
+            className="bg-red-500/20 hover:bg-red-500/30 text-red-200 px-3 py-1 rounded-lg transition-all border border-red-500/30 font-bold shrink-0 cursor-pointer"
+          >
+            درخواست دوباره
           </button>
         </div>
       )}
@@ -469,25 +507,17 @@ export const WalkieTalkieTab: React.FC<WalkieTalkieTabProps> = ({
               </div>
 
               {/* Action buttons to clear sample data or add custom real devices */}
-              <div className="flex items-center gap-2 pt-1 border-t border-[#1E2638]">
-                {onClearPeers && (
+              {onClearPeers && peers.length > 0 && (
+                <div className="flex items-center gap-2 pt-1 border-t border-[#1E2638]">
                   <button
                     onClick={onClearPeers}
-                    className="text-[10px] bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 px-2 py-0.5 rounded-lg transition-colors flex items-center gap-1 font-medium"
+                    className="text-[10px] bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 px-2 py-0.5 rounded-lg transition-colors flex items-center gap-1 font-medium cursor-pointer"
                   >
                     <Trash2 className="w-3 h-3" />
-                    <span>حذف افراد نمونه</span>
+                    <span>پاک کردن لیست دستگاه‌ها</span>
                   </button>
-                )}
-                {onResetSamplePeers && (
-                  <button
-                    onClick={onResetSamplePeers}
-                    className="text-[10px] bg-[#141A26] hover:bg-[#1E2638] text-[#8B95A8] px-2 py-0.5 rounded-lg transition-colors border border-[#1E2638]"
-                  >
-                    بازنشانی نمونه‌ها
-                  </button>
-                )}
-              </div>
+                </div>
+              )}
 
               {/* Add Custom Device Form */}
               <form onSubmit={handleAddNewDevice} className="flex items-center gap-1.5 pt-1">
@@ -623,12 +653,12 @@ export const WalkieTalkieTab: React.FC<WalkieTalkieTabProps> = ({
                 <div>
                   {isPeerTalking ? (
                     <div className="flex items-center gap-1 bg-[#00D2FF]/15 text-[#00D2FF] px-2 py-0.5 rounded-full border border-[#00D2FF]/30 text-[10px] font-bold">
-                      <span className="animate-pulse">در حال پخش</span>
+                      <span className="animate-pulse">در حال پخش صدا</span>
                       <Volume2 className="w-3 h-3 animate-bounce" />
                     </div>
                   ) : (
-                    <span className="text-[10px] text-[#8B95A8] hover:text-white bg-[#141A26] hover:bg-[#1E2638] px-2 py-0.5 rounded-lg border border-[#1E2638] transition-colors">
-                      تست شنود
+                    <span className="text-[10px] text-[#8B95A8] bg-[#141A26] px-2 py-0.5 rounded-lg border border-[#1E2638]">
+                      شنونده
                     </span>
                   )}
                 </div>

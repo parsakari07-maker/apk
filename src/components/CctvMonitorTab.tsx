@@ -54,20 +54,18 @@ export const CctvMonitorTab: React.FC<CctvMonitorTabProps> = ({
   const isStreaming = externalIsStreaming !== undefined ? externalIsStreaming : internalIsStreaming;
 
   // Selected camera feed being viewed in the monitor
-  // Can be a peer's ID (e.g. 'peer-3') or 'my-camera'
-  const defaultPeerId = peers.length > 0 ? peers[0].id : 'my-camera';
-  const [selectedCameraId, setSelectedCameraId] = useState<string>(defaultPeerId);
+  // Can be a peer's ID or 'my-camera'
+  const defaultCameraId = peers.length > 0 ? peers[0].id : 'my-camera';
+  const [selectedCameraId, setSelectedCameraId] = useState<string>(defaultCameraId);
 
   // Per-camera live state (allows any viewer to control the camera)
   const [cameraStates, setCameraStates] = useState<Record<string, RemoteCameraState>>({
-    'peer-1': { torch: false, facing: 'back', stealth: false, muted: false, zoom: 1 },
-    'peer-2': { torch: false, facing: 'front', stealth: false, muted: false, zoom: 1 },
-    'peer-3': { torch: false, facing: 'back', stealth: false, muted: false, zoom: 1 },
     'my-camera': { torch: false, facing: 'back', stealth: false, muted: false, zoom: 1 },
   });
 
   // Action toast when a command is sent or received
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
+  const [cameraError, setCameraError] = useState<string | null>(null);
 
   // Timecode and real-time stats
   const [timecode, setTimecode] = useState('');
@@ -76,6 +74,13 @@ export const CctvMonitorTab: React.FC<CctvMonitorTabProps> = ({
   // Video element and local media stream for 'my-camera'
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
+
+  // Auto-switch to my-camera if peers list becomes empty
+  useEffect(() => {
+    if (selectedCameraId !== 'my-camera' && !peers.some((p) => p.id === selectedCameraId)) {
+      setSelectedCameraId('my-camera');
+    }
+  }, [peers, selectedCameraId]);
 
   // Selected camera current state
   const currentCameraState = cameraStates[selectedCameraId] || {
@@ -120,11 +125,13 @@ export const CctvMonitorTab: React.FC<CctvMonitorTabProps> = ({
   }, [isViewingMyCamera, isStreaming, currentCameraState.facing]);
 
   const startLocalCamera = async () => {
+    setCameraError(null);
     try {
       const constraints: MediaStreamConstraints = {
         video: {
-          facingMode: currentCameraState.facing === 'back' ? 'environment' : 'user',
-          width: 1920,
+          facingMode: currentCameraState.facing === 'back' ? { ideal: 'environment' } : { ideal: 'user' },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
         },
         audio: !currentCameraState.muted,
       };
@@ -134,8 +141,13 @@ export const CctvMonitorTab: React.FC<CctvMonitorTabProps> = ({
         videoRef.current.srcObject = stream;
         videoRef.current.play().catch(() => {});
       }
-    } catch {
-      // Fallback in sandbox: synthetic visual feed continues
+    } catch (err) {
+      console.warn('Camera permission or device error:', err);
+      const errorMsg =
+        err instanceof DOMException && (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError')
+          ? 'دسترسی به دوربین توسط کاربر یا سیستم رد شد. لطفاً مجوز دوربین را تأیید کنید.'
+          : 'امکان اتصال به سخت‌افزار دوربین وجود ندارد یا دوربین در حال استفاده در برنامه دیگری است.';
+      setCameraError(errorMsg);
     }
   };
 
@@ -147,6 +159,7 @@ export const CctvMonitorTab: React.FC<CctvMonitorTabProps> = ({
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
+    setCameraError(null);
   };
 
   // Show quick toast notification
@@ -158,7 +171,7 @@ export const CctvMonitorTab: React.FC<CctvMonitorTabProps> = ({
   };
 
   // Direct camera controls available to all members watching
-  const handleToggleTorch = () => {
+  const handleToggleTorch = async () => {
     const nextVal = !currentCameraState.torch;
     setCameraStates((prev) => ({
       ...prev,
@@ -167,6 +180,24 @@ export const CctvMonitorTab: React.FC<CctvMonitorTabProps> = ({
         torch: nextVal,
       },
     }));
+
+    // If controlling local camera, apply torch to real video track
+    if (isViewingMyCamera && mediaStreamRef.current) {
+      try {
+        const videoTrack = mediaStreamRef.current.getVideoTracks()[0];
+        if (videoTrack) {
+          const capabilities = (videoTrack.getCapabilities && videoTrack.getCapabilities()) as { torch?: boolean };
+          if (capabilities && capabilities.torch) {
+            await (videoTrack as MediaStreamTrack & { applyConstraints: (c: unknown) => Promise<void> }).applyConstraints({
+              advanced: [{ torch: nextVal }],
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Torch constraint not supported on this track:', err);
+      }
+    }
+
     showFeedback(
       nextVal
         ? `چراغ‌قوه دوربین ${cameraOwnerName} روشن شد`
@@ -370,7 +401,21 @@ export const CctvMonitorTab: React.FC<CctvMonitorTabProps> = ({
 
           {/* Video Stream: either getUserMedia for my camera or high-definition camera viewport */}
           {isViewingMyCamera ? (
-            isStreaming ? (
+            cameraError ? (
+              <div className="flex flex-col items-center justify-center p-5 text-center z-20 max-w-sm space-y-2">
+                <div className="w-12 h-12 rounded-2xl bg-red-500/20 border border-red-500/40 flex items-center justify-center text-red-400 mb-1">
+                  <AlertCircle className="w-6 h-6" />
+                </div>
+                <div className="text-xs font-bold text-red-300">خطای دسترسی به دوربین</div>
+                <p className="text-[11px] text-slate-300 leading-relaxed">{cameraError}</p>
+                <button
+                  onClick={startLocalCamera}
+                  className="mt-2 px-3.5 py-1.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-200 border border-red-500/40 text-xs font-bold transition-all cursor-pointer"
+                >
+                  درخواست مجدد دسترسی دوربین
+                </button>
+              </div>
+            ) : isStreaming ? (
               <video
                 ref={videoRef}
                 playsInline

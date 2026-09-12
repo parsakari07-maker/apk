@@ -51,7 +51,7 @@ jobs:
       - name: Setup Capacitor & Generate Android Project
         working-directory: ${{ env.ROOT_DIR }}
         run: |
-          npm install @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest
+          npm install @capacitor/core@^6.0.0 @capacitor/cli@^6.0.0 @capacitor/android@^6.0.0
           npx cap init "LocalNet" "com.localnet.mesh" --web-dir dist
           npx cap add android || true
           npx cap sync android

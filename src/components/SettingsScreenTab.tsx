@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Sun,
   Moon,
@@ -9,8 +9,12 @@ import {
   User,
   Lock,
   CheckCircle2,
+  ShieldCheck,
+  Bell,
+  Power
 } from 'lucide-react';
 import { ThemeMode, UserProfile } from '../types';
+import { backgroundService } from '../utils/backgroundService';
 
 interface SettingsScreenTabProps {
   profile: UserProfile;
@@ -30,6 +34,33 @@ export const SettingsScreenTab: React.FC<SettingsScreenTabProps> = ({
 }) => {
   const [usernameInput, setUsernameInput] = useState(profile.username);
   const [isSavedToast, setIsSavedToast] = useState(false);
+  const [isBgEnabled, setIsBgEnabled] = useState(() => {
+    return localStorage.getItem('netmaster_background_service_enabled') === 'true';
+  });
+  const [isRequestingBg, setIsRequestingBg] = useState(false);
+  const [notificationStatus, setNotificationStatus] = useState<string>(() => {
+    return typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'not_supported';
+  });
+
+  const handleToggleBg = async () => {
+    if (isBgEnabled) {
+      backgroundService.releaseBackgroundService();
+      setIsBgEnabled(false);
+    } else {
+      setIsRequestingBg(true);
+      try {
+        const res = await backgroundService.requestBackgroundPermissions();
+        setIsBgEnabled(true);
+        if (typeof window !== 'undefined' && 'Notification' in window) {
+          setNotificationStatus(Notification.permission);
+        }
+      } catch (e) {
+        console.warn('Background error:', e);
+      } finally {
+        setIsRequestingBg(false);
+      }
+    }
+  };
 
   const handleSaveUsername = (e: React.FormEvent) => {
     e.preventDefault();
@@ -402,21 +433,40 @@ export const SettingsScreenTab: React.FC<SettingsScreenTabProps> = ({
         </div>
 
         <div
-          className={`p-3 rounded-xl space-y-1.5 text-xs ${
+          className={`p-3 rounded-xl space-y-2 text-xs ${
             isDark ? 'bg-[#111318] text-[#CBD5E1]' : 'bg-slate-50 text-slate-700'
           }`}
         >
+          <div className="flex items-center justify-between py-1 border-b border-[#262C38]/40">
+            <div className="flex items-center gap-2">
+              <span className={`w-2.5 h-2.5 rounded-full ${isBgEnabled ? 'bg-emerald-400 animate-ping' : 'bg-slate-500'}`} />
+              <span className="font-bold">وضعیت سرویس پس‌زمینه و مجوز بیداری (WakeLock):</span>
+            </div>
+            <button
+              onClick={handleToggleBg}
+              disabled={isRequestingBg}
+              className={`px-3 py-1.5 rounded-xl font-bold text-[11px] transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 ${
+                isBgEnabled
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                  : 'bg-[#4CC9F0] text-[#111318] hover:bg-[#4CC9F0]/90'
+              }`}
+            >
+              <Power className="w-3.5 h-3.5" />
+              <span>{isBgEnabled ? 'سرویس فعال است (خاموش کردن)' : 'درخواست مجوز و فعال‌سازی'}</span>
+            </button>
+          </div>
+
           <div className="flex items-center gap-2 text-[#4CC9F0] font-semibold text-[11px]">
             <Check className="w-3.5 h-3.5" />
-            <span>Foreground Service با اعلان پایدار در اندروید ۱۴</span>
+            <span>مجوز اعلان‌ها (Notifications): {notificationStatus === 'granted' ? 'تأیید شده' : 'نیاز به درخواست'}</span>
           </div>
           <div className="flex items-center gap-2 text-[#70A5D8] font-semibold text-[11px]">
             <Check className="w-3.5 h-3.5" />
-            <span>کسب خودکار Partial WakeLock و WifiLock با حالت High Performance</span>
+            <span>کسب خودکار Partial WakeLock جهت جلوگیری از Sleep پردازنده</span>
           </div>
           <div className="flex items-center gap-2 text-[#93C5FD] font-semibold text-[11px]">
             <Check className="w-3.5 h-3.5" />
-            <span>پشتیبانی از پورت‌های چندگانه UDP با فلگ SO_REUSEADDR جهت رفع تداخل</span>
+            <span>سرویس صوتی پایدار (Keep-Alive Audio Oscillator) برای حفظ سوکت‌های PTT</span>
           </div>
         </div>
       </div>

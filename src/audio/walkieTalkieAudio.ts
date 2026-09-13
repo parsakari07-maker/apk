@@ -123,10 +123,12 @@ export function playRogerBeep() {
 /**
  * Tactical Haptic feedback using Web Vibration API if supported
  */
-export function triggerTacticalHaptic(type: 'press' | 'release' | 'qrScan') {
+export function triggerTacticalHaptic(type: 'press' | 'release' | 'qrScan' | number) {
   try {
     if (typeof window !== 'undefined' && 'vibrate' in navigator) {
-      if (type === 'press') {
+      if (typeof type === 'number') {
+        navigator.vibrate(type);
+      } else if (type === 'press') {
         // Crisp single tap on mic engage
         navigator.vibrate(28);
       } else if (type === 'release') {

@@ -32,6 +32,7 @@ interface OnboardingModalProps {
   onSaveProfile: (profile: UserProfile, enableBgService?: boolean) => void;
   onClose?: () => void;
   canDismiss?: boolean;
+  isDark?: boolean;
 }
 
 export const OnboardingModal: React.FC<OnboardingModalProps> = ({
@@ -40,6 +41,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
   onSaveProfile,
   onClose,
   canDismiss = false,
+  isDark = true,
 }) => {
   const [username, setUsername] = useState(profile.username || '');
   const [errorText, setErrorText] = useState('');
@@ -200,12 +202,16 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
       <motion.div
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.9, opacity: 0 }}
-        className="w-full max-w-md bg-[#161922] border border-[#262C38] rounded-3xl p-6 shadow-2xl text-white select-none relative my-auto"
+        className={`w-full max-w-md rounded-3xl p-6 shadow-2xl select-none relative my-auto border transition-colors ${
+          isDark
+            ? 'bg-[#161922] border-[#262C38] text-white'
+            : 'bg-white border-slate-200 text-slate-900 shadow-slate-300/40'
+        }`}
         dir="rtl"
       >
         {/* Header Icon */}
@@ -213,17 +219,17 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
           <Radio className="w-6 h-6 text-[#00F59B]" />
         </div>
 
-        <h2 className="text-lg font-black text-center text-white">
+        <h2 className={`text-lg font-black text-center ${isDark ? 'text-white' : 'text-slate-900'}`}>
           تنظیم هویت و دسترسی‌های گوشی
         </h2>
-        <p className="text-xs text-[#94A3B8] text-center mt-1 mb-4">
+        <p className={`text-xs text-center mt-1 mb-4 ${isDark ? 'text-[#94A3B8]' : 'text-slate-500'}`}>
           نام کاربری را وارد کنید و مجوزهای سخت‌افزاری را فعال نمایید
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Nickname Input */}
           <div>
-            <label className="block text-xs font-semibold text-[#CBD5E1] mb-1.5">
+            <label className={`block text-xs font-semibold mb-1.5 ${isDark ? 'text-[#CBD5E1]' : 'text-slate-700'}`}>
               نام یا شناسه شما در شبکه <span className="text-red-400">*</span>
             </label>
             <div className="relative">
@@ -238,9 +244,13 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                 maxLength={24}
                 autoFocus
                 required
-                className="w-full bg-[#0D1017] border border-[#2E384D] focus:border-[#00F59B] rounded-2xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none transition-colors"
+                className={`w-full border rounded-2xl px-4 py-2.5 text-sm focus:outline-none transition-colors ${
+                  isDark
+                    ? 'bg-[#0D1017] border-[#2E384D] focus:border-[#00F59B] text-white placeholder-slate-500'
+                    : 'bg-slate-50 border-slate-300 focus:border-[#00F59B] text-slate-900 placeholder-slate-400'
+                }`}
               />
-              <div className="absolute left-3 top-3 text-[#94A3B8]">
+              <div className={`absolute left-3 top-3 ${isDark ? 'text-[#94A3B8]' : 'text-slate-400'}`}>
                 <User className="w-4 h-4" />
               </div>
             </div>
@@ -254,7 +264,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
           {/* Real Permission Request Action Cards */}
           <div className="space-y-2 pt-1">
             <div className="flex items-center justify-between">
-              <label className="block text-xs font-semibold text-[#CBD5E1]">
+              <label className={`block text-xs font-semibold ${isDark ? 'text-[#CBD5E1]' : 'text-slate-700'}`}>
                 مجوزهای سخت‌افزاری مورد نیاز:
               </label>
               <span className="text-[10px] text-[#00F59B] font-mono font-bold">
@@ -266,10 +276,16 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
             <div
               className={`p-3 rounded-2xl border transition-all ${
                 micStatus === 'granted'
-                  ? 'bg-emerald-950/30 border-emerald-500/50'
+                  ? isDark
+                    ? 'bg-emerald-950/30 border-emerald-500/50'
+                    : 'bg-emerald-50 border-emerald-300'
                   : micStatus === 'denied'
-                  ? 'bg-red-950/20 border-red-500/30'
-                  : 'bg-[#0E131E] border-[#222B3D]'
+                  ? isDark
+                    ? 'bg-red-950/20 border-red-500/30'
+                    : 'bg-red-50 border-red-200'
+                  : isDark
+                  ? 'bg-[#0E131E] border-[#222B3D]'
+                  : 'bg-slate-50 border-slate-200'
               }`}
             >
               <div className="flex items-center justify-between gap-2.5">
@@ -278,25 +294,27 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                     className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
                       micStatus === 'granted'
                         ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                        : 'bg-slate-800 text-slate-400'
+                        : isDark
+                        ? 'bg-slate-800 text-slate-400'
+                        : 'bg-slate-200 text-slate-600'
                     }`}
                   >
                     <Mic className="w-4 h-4" />
                   </div>
                   <div>
-                    <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <div className={`text-xs font-bold flex items-center gap-1.5 ${isDark ? 'text-white' : 'text-slate-900'}`}>
                       <span>مجوز میکروفون (بیسیم صوتی)</span>
                       {micStatus === 'granted' ? (
-                        <span className="text-[9px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded font-mono font-bold">
+                        <span className="text-[9px] bg-emerald-500/20 text-emerald-500 px-1.5 py-0.2 rounded font-mono font-bold">
                           تأیید شد
                         </span>
                       ) : (
-                        <span className="text-[9px] bg-[#00F59B]/20 text-[#00F59B] px-1.5 py-0.2 rounded font-mono">
+                        <span className="text-[9px] bg-[#00F59B]/20 text-[#00F59B] px-1.5 py-0.2 rounded font-mono font-bold">
                           ضروری
                         </span>
                       )}
                     </div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">
+                    <div className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                       ارسال صوت بیسیم PTT در شبکه محلی
                     </div>
                   </div>
@@ -308,7 +326,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                   disabled={requestingMic || micStatus === 'granted'}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer shrink-0 ${
                     micStatus === 'granted'
-                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 cursor-default'
+                      ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border border-emerald-500/30 cursor-default'
                       : 'bg-[#00F59B] text-[#0A0D14] hover:bg-[#00F59B]/90 shadow-sm'
                   }`}
                 >
@@ -327,10 +345,16 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
             <div
               className={`p-3 rounded-2xl border transition-all ${
                 cameraStatus === 'granted'
-                  ? 'bg-emerald-950/30 border-emerald-500/50'
+                  ? isDark
+                    ? 'bg-emerald-950/30 border-emerald-500/50'
+                    : 'bg-emerald-50 border-emerald-300'
                   : cameraStatus === 'denied'
-                  ? 'bg-red-950/20 border-red-500/30'
-                  : 'bg-[#0E131E] border-[#222B3D]'
+                  ? isDark
+                    ? 'bg-red-950/20 border-red-500/30'
+                    : 'bg-red-50 border-red-200'
+                  : isDark
+                  ? 'bg-[#0E131E] border-[#222B3D]'
+                  : 'bg-slate-50 border-slate-200'
               }`}
             >
               <div className="flex items-center justify-between gap-2.5">
@@ -339,25 +363,27 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                     className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
                       cameraStatus === 'granted'
                         ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                        : 'bg-slate-800 text-slate-400'
+                        : isDark
+                        ? 'bg-slate-800 text-slate-400'
+                        : 'bg-slate-200 text-slate-600'
                     }`}
                   >
                     <Camera className="w-4 h-4" />
                   </div>
                   <div>
-                    <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <div className={`text-xs font-bold flex items-center gap-1.5 ${isDark ? 'text-white' : 'text-slate-900'}`}>
                       <span>مجوز دوربین (CCTV و استریم)</span>
                       {cameraStatus === 'granted' ? (
-                        <span className="text-[9px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded font-mono font-bold">
+                        <span className="text-[9px] bg-emerald-500/20 text-emerald-500 px-1.5 py-0.2 rounded font-mono font-bold">
                           تأیید شد
                         </span>
                       ) : (
-                        <span className="text-[9px] bg-[#4CC9F0]/20 text-[#4CC9F0] px-1.5 py-0.2 rounded font-mono">
+                        <span className="text-[9px] bg-[#4CC9F0]/20 text-[#0284C7] dark:text-[#4CC9F0] px-1.5 py-0.2 rounded font-mono font-bold">
                           مداربسته
                         </span>
                       )}
                     </div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">
+                    <div className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                       اشتراک تصویر زنده دوربین و مانیتورینگ امنیتی
                     </div>
                   </div>
@@ -369,7 +395,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                   disabled={requestingCamera || cameraStatus === 'granted'}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer shrink-0 ${
                     cameraStatus === 'granted'
-                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 cursor-default'
+                      ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border border-emerald-500/30 cursor-default'
                       : 'bg-[#4CC9F0] text-[#0A0D14] hover:bg-[#4CC9F0]/90 shadow-sm'
                   }`}
                 >
@@ -388,8 +414,12 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
             <div
               className={`p-3 rounded-2xl border transition-all ${
                 bgStatus === 'granted'
-                  ? 'bg-sky-950/30 border-sky-500/50'
-                  : 'bg-[#0E131E] border-[#222B3D]'
+                  ? isDark
+                    ? 'bg-sky-950/30 border-sky-500/50'
+                    : 'bg-sky-50 border-sky-300'
+                  : isDark
+                  ? 'bg-[#0E131E] border-[#222B3D]'
+                  : 'bg-slate-50 border-slate-200'
               }`}
             >
               <div className="flex items-center justify-between gap-2.5">
@@ -398,21 +428,23 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                     className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
                       bgStatus === 'granted'
                         ? 'bg-sky-500/20 text-[#4CC9F0] border border-sky-500/30'
-                        : 'bg-slate-800 text-slate-400'
+                        : isDark
+                        ? 'bg-slate-800 text-slate-400'
+                        : 'bg-slate-200 text-slate-600'
                     }`}
                   >
                     <Cpu className="w-4 h-4" />
                   </div>
                   <div>
-                    <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <div className={`text-xs font-bold flex items-center gap-1.5 ${isDark ? 'text-white' : 'text-slate-900'}`}>
                       <span>سرویس پس‌زمینه و اعلان (WakeLock)</span>
                       {bgStatus === 'granted' && (
-                        <span className="text-[9px] bg-sky-500/20 text-sky-300 px-1.5 py-0.2 rounded font-mono font-bold">
+                        <span className="text-[9px] bg-sky-500/20 text-sky-600 dark:text-sky-300 px-1.5 py-0.2 rounded font-mono font-bold">
                           فعال
                         </span>
                       )}
                     </div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">
+                    <div className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                       جلوگیری از قطع ارتباط سوکت‌ها هنگام خاموشی صفحه
                     </div>
                   </div>
@@ -424,8 +456,10 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                   disabled={requestingBg || bgStatus === 'granted'}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer shrink-0 ${
                     bgStatus === 'granted'
-                      ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30 cursor-default'
-                      : 'bg-[#2E384D] hover:bg-[#3D4B66] text-white'
+                      ? 'bg-sky-500/20 text-sky-600 dark:text-sky-300 border border-sky-500/30 cursor-default'
+                      : isDark
+                      ? 'bg-[#2E384D] hover:bg-[#3D4B66] text-white'
+                      : 'bg-slate-200 hover:bg-slate-300 text-slate-800'
                   }`}
                 >
                   {requestingBg ? (
@@ -442,7 +476,13 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
 
           {/* Feedback message if any */}
           {permissionNotice && (
-            <div className="p-2.5 rounded-xl bg-[#0E131E] border border-[#2E384D] text-[11px] text-slate-300 flex items-center gap-2">
+            <div
+              className={`p-2.5 rounded-xl border text-[11px] flex items-center gap-2 ${
+                isDark
+                  ? 'bg-[#0E131E] border-[#2E384D] text-slate-300'
+                  : 'bg-slate-100 border-slate-200 text-slate-700'
+              }`}
+            >
               <Sparkles className="w-3.5 h-3.5 text-[#00F59B] shrink-0" />
               <span>{permissionNotice}</span>
             </div>
@@ -456,7 +496,9 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
               className={`flex-1 font-extrabold text-xs sm:text-sm py-3 px-4 rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 ${
                 isNameValid && !isSubmitting
                   ? 'bg-[#00F59B] text-[#0A0D14] hover:bg-[#00F59B]/90 shadow-[#00F59B]/25 cursor-pointer active:scale-95'
-                  : 'bg-zinc-800 text-zinc-500 cursor-not-allowed opacity-60'
+                  : isDark
+                  ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed opacity-60'
+                  : 'bg-slate-200 text-slate-400 cursor-not-allowed opacity-60'
               }`}
             >
               {isSubmitting ? (
@@ -475,7 +517,11 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="bg-[#262C38] hover:bg-[#343D4E] text-[#94A3B8] text-xs sm:text-sm py-3 px-4 rounded-2xl transition-colors cursor-pointer"
+                className={`text-xs sm:text-sm py-3 px-4 rounded-2xl transition-colors cursor-pointer ${
+                  isDark
+                    ? 'bg-[#262C38] hover:bg-[#343D4E] text-[#94A3B8]'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                }`}
               >
                 انصراف
               </button>

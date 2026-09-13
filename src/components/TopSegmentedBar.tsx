@@ -9,7 +9,6 @@ import {
   Compass,
   MessageSquare,
   ScreenShare,
-  Network
 } from 'lucide-react';
 import { AppTab } from '../types';
 
@@ -20,7 +19,6 @@ interface TopSegmentedBarProps {
   onOpenSettings: () => void;
   onOpenQR?: () => void;
   onOpenApkGuide?: () => void;
-  onOpenArchitecture?: () => void;
   networkSsid: string;
   myRole: 'host' | 'client';
   isDark?: boolean;
@@ -40,7 +38,6 @@ export const TopSegmentedBar: React.FC<TopSegmentedBarProps> = ({
   peerCount,
   onOpenSettings,
   onOpenQR,
-  onOpenArchitecture,
   networkSsid,
   myRole,
   isDark = true,
@@ -88,53 +85,40 @@ export const TopSegmentedBar: React.FC<TopSegmentedBarProps> = ({
           </span>
         </div>
 
-        {/* Right side: Connection Hub, Architecture, Settings */}
-        <div className="flex items-center gap-1.5">
+        {/* Right side: Connection Hub, Settings */}
+        <div className="flex items-center gap-2">
           {onOpenQR && (
             <button
               onClick={onOpenQR}
-              className={`h-7 px-2.5 rounded-full border flex items-center gap-1.5 text-[#4CC9F0] transition-all shadow-sm cursor-pointer ${
+              className={`h-8 px-3 rounded-xl border flex items-center gap-1.5 text-[#4CC9F0] transition-all shadow-sm cursor-pointer ${
                 isDark
                   ? 'bg-[#1B1F28] hover:bg-[#262C38] border-[#262C38] hover:border-[#4CC9F0]/40'
-                  : 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-sky-600'
+                  : 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-sky-700'
               }`}
               title="اتصال به دستگاه‌ها (IP مستقیم / پویش شبکه / بارکد QR)"
             >
-              <QrCode className="w-3.5 h-3.5" />
-              <span className="text-[10px] font-bold">
-                {peerCount > 0 ? `${peerCount} دستگاه` : 'اتصال دستگاه'}
+              <QrCode className="w-4 h-4" />
+              <span className="text-xs font-bold">
+                {peerCount > 0 ? `${peerCount} دستگاه` : 'اتصال'}
               </span>
-            </button>
-          )}
-
-          {onOpenArchitecture && (
-            <button
-              onClick={onOpenArchitecture}
-              className={`w-7 h-7 rounded-full border flex items-center justify-center text-[#818CF8] transition-all shadow-sm cursor-pointer ${
-                isDark
-                  ? 'bg-[#1B1F28] hover:bg-[#262C38] border-[#262C38] hover:border-[#818CF8]/40'
-                  : 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-indigo-600'
-              }`}
-              title="مستندات معماری سیستم"
-            >
-              <Network className="w-3.5 h-3.5" />
             </button>
           )}
 
           <button
             onClick={() => onTabChange('settings')}
-            className={`w-7 h-7 rounded-full border flex items-center justify-center transition-all shadow-sm ${
+            className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl border flex items-center justify-center transition-all shadow-sm cursor-pointer ${
               currentTab === 'settings'
                 ? isDark
                   ? 'bg-[#4CC9F0]/20 border-[#4CC9F0] text-[#4CC9F0]'
                   : 'bg-sky-100 border-sky-400 text-sky-700'
                 : isDark
                 ? 'bg-[#1B1F28] hover:bg-[#262C38] border-[#262C38] text-[#94A3B8] hover:text-white'
-                : 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-600'
+                : 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-700'
             }`}
             title="تنظیمات سیستم و تم"
+            aria-label="تنظیمات"
           >
-            <Settings className="w-3.5 h-3.5" />
+            <Settings className="w-4 h-4" />
           </button>
         </div>
       </div>

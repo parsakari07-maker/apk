@@ -35,7 +35,7 @@ import { backgroundService } from './utils/backgroundService';
 import { generatePythonSetupScript, generateBashSetupScript, triggerFileDownload } from './utils/projectGenerator';
 
 export default function App() {
-  const [currentTab, setCurrentTab] = useState<AppTab>('radar');
+  const [currentTab, setCurrentTab] = useState<AppTab>('walkie');
 
   // Dynamic Theming: Jetpack DataStore equivalent local state
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
@@ -147,10 +147,10 @@ export default function App() {
       }`}
       dir="rtl"
     >
-      {/* Main Application Container */}
-      <main className="flex-1 flex flex-col overflow-hidden p-2 sm:p-4 max-w-5xl w-full mx-auto min-h-0">
+      {/* Main Application Container - Full screen edge-to-edge on mobile */}
+      <main className="flex-1 flex flex-col overflow-hidden p-0 sm:p-2 md:p-3 max-w-6xl w-full h-full mx-auto min-h-0">
         <div
-          className={`flex-1 flex flex-col rounded-2xl border shadow-xl overflow-hidden transition-colors duration-300 min-h-0 ${
+          className={`flex-1 flex flex-col rounded-none sm:rounded-2xl border-0 sm:border shadow-none sm:shadow-xl overflow-hidden transition-colors duration-300 min-h-0 ${
             isDark ? 'bg-[#0E121A] border-[#222836]' : 'bg-white border-slate-200'
           }`}
         >
@@ -252,6 +252,7 @@ export default function App() {
                 peers={peers}
                 profile={profile}
                 activeSpeakerId={activeSpeakerId}
+                isDark={isDark}
                 onSetActiveSpeaker={(id) => setActiveSpeakerId(id)}
                 onAddCustomPeer={(peer) => setPeers((prev) => [peer, ...prev])}
                 onClearPeers={() => setPeers([])}
@@ -282,6 +283,7 @@ export default function App() {
                 profile={profile}
                 messages={messages}
                 files={files}
+                isDark={isDark}
                 onSendMessage={(text) => {
                   setMessages((prev) => [
                     ...prev,
@@ -334,12 +336,14 @@ export default function App() {
         profile={profile}
         onSaveProfile={handleSaveProfile}
         onClose={() => setIsOnboardingOpen(false)}
+        isDark={isDark}
       />
 
       {/* Architecture Deep-Dive Modal */}
       <ArchitectureModal
         isOpen={isArchModalOpen}
         onClose={() => setIsArchModalOpen(false)}
+        isDark={isDark}
       />
 
       {/* Connection Hub (Direct IP, LAN Scan, QR) */}
@@ -350,6 +354,7 @@ export default function App() {
         hostIp={profile.localIp}
         hostPort={8888}
         hostName={profile.username}
+        isDark={isDark}
         onAddPeer={(newPeer) => {
           setPeers((prev) => {
             const exists = prev.some((p) => p.ip === newPeer.ip);
@@ -390,6 +395,7 @@ export default function App() {
         isOpen={isApkModalOpen}
         onClose={() => setIsApkModalOpen(false)}
         onDownloadZip={handleDownloadPythonScript}
+        isDark={isDark}
       />
     </div>
   );

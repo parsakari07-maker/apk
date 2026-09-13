@@ -1,10 +1,11 @@
 // systemPermissions.ts
+// Robust Android Native Bridge and Web Runtime Permission Orchestrator
 // Handles real Android hardware and system permission requests:
 // 1. Microphone (RECORD_AUDIO) via Android Bridge / getUserMedia
 // 2. Camera (CAMERA) via Android Bridge / getUserMedia
 // 3. Notifications (POST_NOTIFICATIONS) via Android Bridge / Notification API
-// 4. Background Execution & WakeLock (WAKE_LOCK) via navigator.wakeLock / Android Service
-// 5. Screen Capture (MediaProjection) via getDisplayMedia
+// 4. Storage (READ_MEDIA_* / READ_EXTERNAL_STORAGE) via Android Bridge / File System
+// 5. Background Execution & WakeLock via Android Service / navigator.wakeLock
 
 import { backgroundService } from './backgroundService';
 
@@ -12,6 +13,7 @@ export interface DevicePermissionStatus {
   microphone: 'granted' | 'denied' | 'prompt';
   camera: 'granted' | 'denied' | 'prompt';
   notification: 'granted' | 'denied' | 'prompt';
+  storage: 'granted' | 'denied' | 'prompt';
   wakeLock: boolean;
 }
 
@@ -21,50 +23,91 @@ export interface PermissionRequestResult {
   error?: string;
 }
 
-// Check current status of permissions
+// Global cached states that update reactively
+const listeners = new Set<(status: DevicePermissionStatus) => void>();
+
+export function subscribePermissionChanges(callback: (status: DevicePermissionStatus) => void): () => void {
+  listeners.add(callback);
+  return () => listeners.delete(callback);
+}
+
+function notifySubscribers() {
+  checkSystemPermissions().then((status) => {
+    listeners.forEach((cb) => {
+      try {
+        cb(status);
+      } catch {}
+    });
+  });
+}
+
+// Listen for Android Native Bridge permission callbacks
+if (typeof window !== 'undefined') {
+  window.addEventListener('androidPermissionChanged', () => {
+    notifySubscribers();
+  });
+}
+
+// Check current status of all hardware & system permissions
 export async function checkSystemPermissions(): Promise<DevicePermissionStatus> {
   let microphone: 'granted' | 'denied' | 'prompt' = 'prompt';
   let camera: 'granted' | 'denied' | 'prompt' = 'prompt';
   let notification: 'granted' | 'denied' | 'prompt' = 'prompt';
+  let storage: 'granted' | 'denied' | 'prompt' = 'prompt';
 
-  // Check Android Bridge if running in native Android wrapper
   const win = typeof window !== 'undefined' ? (window as any) : null;
+
+  // 1. Check Android Native Bridge if running in Android APK wrapper
   if (win && win.AndroidPermissions) {
     try {
-      if (win.AndroidPermissions.hasMicrophonePermission && win.AndroidPermissions.hasMicrophonePermission()) {
-        microphone = 'granted';
+      if (typeof win.AndroidPermissions.getAllPermissionStates === 'function') {
+        const raw = win.AndroidPermissions.getAllPermissionStates();
+        const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        if (parsed.microphone !== undefined) microphone = parsed.microphone ? 'granted' : 'prompt';
+        if (parsed.camera !== undefined) camera = parsed.camera ? 'granted' : 'prompt';
+        if (parsed.notification !== undefined) notification = parsed.notification ? 'granted' : 'prompt';
+        if (parsed.storage !== undefined) storage = parsed.storage ? 'granted' : 'prompt';
+      } else {
+        if (typeof win.AndroidPermissions.hasMicrophonePermission === 'function') {
+          microphone = win.AndroidPermissions.hasMicrophonePermission() ? 'granted' : 'prompt';
+        }
+        if (typeof win.AndroidPermissions.hasCameraPermission === 'function') {
+          camera = win.AndroidPermissions.hasCameraPermission() ? 'granted' : 'prompt';
+        }
+        if (typeof win.AndroidPermissions.hasNotificationPermission === 'function') {
+          notification = win.AndroidPermissions.hasNotificationPermission() ? 'granted' : 'prompt';
+        }
+        if (typeof win.AndroidPermissions.hasStoragePermission === 'function') {
+          storage = win.AndroidPermissions.hasStoragePermission() ? 'granted' : 'prompt';
+        }
       }
-      if (win.AndroidPermissions.hasCameraPermission && win.AndroidPermissions.hasCameraPermission()) {
-        camera = 'granted';
-      }
-      if (win.AndroidPermissions.hasNotificationPermission && win.AndroidPermissions.hasNotificationPermission()) {
-        notification = 'granted';
-      }
-    } catch {
-      // Fall through to standard APIs
+    } catch (e) {
+      console.warn('Error reading AndroidPermissions bridge:', e);
     }
   }
 
+  // 2. Query browser permissions API
   if (typeof navigator !== 'undefined' && navigator.permissions && navigator.permissions.query) {
     try {
       const micStatus = await navigator.permissions.query({ name: 'microphone' as PermissionName });
       if (micStatus) microphone = micStatus.state as any;
-    } catch {
-      // Query not supported for microphone on some devices
-    }
+    } catch {}
 
     try {
       const camStatus = await navigator.permissions.query({ name: 'camera' as PermissionName });
       if (camStatus) camera = camStatus.state as any;
-    } catch {
-      // Query not supported for camera
-    }
+    } catch {}
+
+    try {
+      const notifStatus = await navigator.permissions.query({ name: 'notifications' as PermissionName });
+      if (notifStatus) notification = notifStatus.state as any;
+    } catch {}
   }
 
+  // 3. Fallback notification check
   if (typeof window !== 'undefined' && 'Notification' in window) {
     if (Notification.permission === 'granted') notification = 'granted';
     else if (Notification.permission === 'denied') notification = 'denied';
-    else notification = 'prompt';
   }
 
   const wakeLock = backgroundService.isWakeLockActive();
@@ -73,26 +116,30 @@ export async function checkSystemPermissions(): Promise<DevicePermissionStatus> 
     microphone,
     camera,
     notification,
+    storage,
     wakeLock,
   };
 }
 
-// Request real microphone permission from Android device
+// Request real microphone permission from Android device / browser
 export async function requestMicrophonePermission(): Promise<PermissionRequestResult> {
   const win = typeof window !== 'undefined' ? (window as any) : null;
 
-  // 1. Android Native Bridge Hook if present in APK
-  if (win && win.AndroidPermissions && win.AndroidPermissions.requestMicrophone) {
+  // 1. Android Native Bridge Hook
+  if (win && win.AndroidPermissions && typeof win.AndroidPermissions.requestMicrophone === 'function') {
     try {
-      const granted = win.AndroidPermissions.requestMicrophone();
-      if (granted) {
+      win.AndroidPermissions.requestMicrophone();
+      // If native bridge already has permission
+      if (win.AndroidPermissions.hasMicrophonePermission && win.AndroidPermissions.hasMicrophonePermission()) {
+        notifySubscribers();
         return { success: true, status: 'granted' };
       }
-    } catch {
-      // Continue to mediaDevices request
+    } catch (e) {
+      console.warn('Native requestMicrophone failed:', e);
     }
   }
 
+  // 2. Real Web / WebView getUserMedia trigger (brings up system permission dialog)
   try {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       return {
@@ -108,8 +155,9 @@ export async function requestMicrophonePermission(): Promise<PermissionRequestRe
         autoGainControl: true,
       },
     });
-    // Release tracks after granting permission so the mic indicator turns off until needed
+    // Immediately release tracks so recording icon turns off until PTT is held
     stream.getTracks().forEach((track) => track.stop());
+    notifySubscribers();
     return {
       success: true,
       status: 'granted',
@@ -130,22 +178,24 @@ export async function requestMicrophonePermission(): Promise<PermissionRequestRe
   }
 }
 
-// Request real camera permission from Android device
+// Request real camera permission from Android device / browser
 export async function requestCameraPermission(): Promise<PermissionRequestResult> {
   const win = typeof window !== 'undefined' ? (window as any) : null;
 
-  // 1. Android Native Bridge Hook if present in APK
-  if (win && win.AndroidPermissions && win.AndroidPermissions.requestCamera) {
+  // 1. Android Native Bridge Hook
+  if (win && win.AndroidPermissions && typeof win.AndroidPermissions.requestCamera === 'function') {
     try {
-      const granted = win.AndroidPermissions.requestCamera();
-      if (granted) {
+      win.AndroidPermissions.requestCamera();
+      if (win.AndroidPermissions.hasCameraPermission && win.AndroidPermissions.hasCameraPermission()) {
+        notifySubscribers();
         return { success: true, status: 'granted' };
       }
-    } catch {
-      // Continue to mediaDevices request
+    } catch (e) {
+      console.warn('Native requestCamera failed:', e);
     }
   }
 
+  // 2. Real Web / WebView getUserMedia trigger
   try {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       return {
@@ -160,6 +210,7 @@ export async function requestCameraPermission(): Promise<PermissionRequestResult
       },
     });
     stream.getTracks().forEach((track) => track.stop());
+    notifySubscribers();
     return {
       success: true,
       status: 'granted',
@@ -180,21 +231,24 @@ export async function requestCameraPermission(): Promise<PermissionRequestResult
   }
 }
 
-// Request notifications permission from Android device
+// Request real notifications permission from Android device / browser
 export async function requestNotificationPermission(): Promise<PermissionRequestResult> {
   const win = typeof window !== 'undefined' ? (window as any) : null;
 
-  if (win && win.AndroidPermissions && win.AndroidPermissions.requestNotification) {
+  // 1. Android Native Bridge Hook
+  if (win && win.AndroidPermissions && typeof win.AndroidPermissions.requestNotification === 'function') {
     try {
-      const granted = win.AndroidPermissions.requestNotification();
-      if (granted) {
+      win.AndroidPermissions.requestNotification();
+      if (win.AndroidPermissions.hasNotificationPermission && win.AndroidPermissions.hasNotificationPermission()) {
+        notifySubscribers();
         return { success: true, status: 'granted' };
       }
-    } catch {
-      // Continue to Notification.requestPermission
+    } catch (e) {
+      console.warn('Native requestNotification failed:', e);
     }
   }
 
+  // 2. Real Web Notification API
   try {
     if (typeof window === 'undefined' || !('Notification' in window)) {
       return {
@@ -209,6 +263,7 @@ export async function requestNotificationPermission(): Promise<PermissionRequest
     }
 
     const permission = await Notification.requestPermission();
+    notifySubscribers();
     if (permission === 'granted') {
       return { success: true, status: 'granted' };
     } else {
@@ -227,6 +282,29 @@ export async function requestNotificationPermission(): Promise<PermissionRequest
   }
 }
 
+// Request real storage access permission
+export async function requestStoragePermission(): Promise<PermissionRequestResult> {
+  const win = typeof window !== 'undefined' ? (window as any) : null;
+
+  // 1. Android Native Bridge Hook
+  if (win && win.AndroidPermissions && typeof win.AndroidPermissions.requestStorage === 'function') {
+    try {
+      win.AndroidPermissions.requestStorage();
+      if (win.AndroidPermissions.hasStoragePermission && win.AndroidPermissions.hasStoragePermission()) {
+        notifySubscribers();
+        return { success: true, status: 'granted' };
+      }
+      return { success: false, status: 'denied' };
+    } catch (e) {
+      console.warn('Native requestStorage failed:', e);
+    }
+  }
+
+  // 2. Web storage / File access API
+  notifySubscribers();
+  return { success: true, status: 'granted' };
+}
+
 // Request background execution and WakeLock
 export async function requestBackgroundPermission(): Promise<{
   notificationGranted: boolean;
@@ -238,15 +316,11 @@ export async function requestBackgroundPermission(): Promise<{
   try {
     const notifRes = await requestNotificationPermission();
     notificationGranted = notifRes.success;
-  } catch {
-    // Continue
-  }
+  } catch {}
 
   try {
     wakeLockAcquired = await backgroundService.acquireWakeLock();
-  } catch {
-    // Continue
-  }
+  } catch {}
 
   return {
     notificationGranted,
@@ -259,17 +333,27 @@ export async function requestAllInitialPermissions(): Promise<{
   microphone: PermissionRequestResult;
   camera: PermissionRequestResult;
   notifications: PermissionRequestResult;
+  storage: PermissionRequestResult;
   wakeLock: boolean;
 }> {
+  const win = typeof window !== 'undefined' ? (window as any) : null;
+  if (win && win.AndroidPermissions && typeof win.AndroidPermissions.requestAllPermissions === 'function') {
+    try {
+      win.AndroidPermissions.requestAllPermissions();
+    } catch {}
+  }
+
   const microphone = await requestMicrophonePermission();
   const camera = await requestCameraPermission();
   const notifications = await requestNotificationPermission();
+  const storage = await requestStoragePermission();
   const wakeLock = await backgroundService.acquireWakeLock();
 
   return {
     microphone,
     camera,
     notifications,
+    storage,
     wakeLock,
   };
 }

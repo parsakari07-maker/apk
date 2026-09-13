@@ -5,18 +5,20 @@ export interface PeerDevice {
   id: string;
   name: string;
   ip: string;
-  port: number;
+  port?: number;
   battery: number;
   rssi: number; // dBm (-30 to -90)
-  isOnline: boolean;
-  isTalking: boolean;
+  isOnline?: boolean;
+  isTalking?: boolean;
+  isSpeaking?: boolean;
+  status?: 'online' | 'offline' | 'connecting' | 'connected' | 'reconnecting';
   isMutedByHost?: boolean;
   role: 'host' | 'client';
-  cameraAvailable: boolean;
-  isStreamingCamera: boolean;
-  cameraFacing: 'back' | 'front';
-  torchActive: boolean;
-  streamFps: number;
+  cameraAvailable?: boolean;
+  isStreamingCamera?: boolean;
+  cameraFacing?: 'back' | 'front';
+  torchActive?: boolean;
+  streamFps?: number;
   lastSeen: number;
   // Radar & Compass
   angleDegree?: number; // 0 to 360 relative to host
@@ -64,7 +66,7 @@ export interface SharedFile {
   name: string;
   sizeBytes: number;
   sizeFormatted: string;
-  type: 'apk' | 'image' | 'video' | 'document';
+  type: 'apk' | 'image' | 'video' | 'document' | 'other';
   senderName: string;
   senderIp?: string;
   timestamp: number;

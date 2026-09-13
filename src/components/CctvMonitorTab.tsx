@@ -27,6 +27,11 @@ import {
   Power
 } from 'lucide-react';
 import { PeerDevice, UserProfile } from '../types';
+import {
+  requestCameraPermission,
+  checkSystemPermissions,
+  subscribePermissionChanges,
+} from '../utils/systemPermissions';
 
 interface CctvMonitorTabProps {
   peers: PeerDevice[];
@@ -76,6 +81,24 @@ export const CctvMonitorTab: React.FC<CctvMonitorTabProps> = ({
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [snapshotToast, setSnapshotToast] = useState<string | null>(null);
+  const [cameraPermission, setCameraPermission] = useState<'granted' | 'prompt' | 'denied'>('prompt');
+
+  // Listen to system permissions reactively
+  useEffect(() => {
+    checkSystemPermissions().then((status) => {
+      if (status.camera === 'granted') {
+        setCameraPermission('granted');
+      }
+    }).catch(() => {});
+
+    const unsubscribe = subscribePermissionChanges((status) => {
+      if (status.camera === 'granted') {
+        setCameraPermission('granted');
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   // Timecode and real-time stats
   const [timecode, setTimecode] = useState('');
@@ -154,6 +177,20 @@ export const CctvMonitorTab: React.FC<CctvMonitorTabProps> = ({
     }
   }, [isFullscreen]);
 
+  const handleRequestCameraPermission = async () => {
+    const result = await requestCameraPermission();
+    if (result.success || result.status === 'granted') {
+      setCameraPermission('granted');
+      showFeedback('مجوز دسترسی به دوربین اعطا شد.');
+      if (!isStreaming) {
+        if (onToggleStreaming) onToggleStreaming();
+        else setInternalIsStreaming(true);
+      }
+    } else {
+      showFeedback('خطا در دریافت مجوز دوربین. لطفاً دسترسی را فعال کنید.');
+    }
+  };
+
   const startLocalCamera = async () => {
     setCameraError(null);
     try {
@@ -171,6 +208,7 @@ export const CctvMonitorTab: React.FC<CctvMonitorTabProps> = ({
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       mediaStreamRef.current = stream;
       attachStreamToVideos(stream);
+      setCameraPermission('granted');
     } catch (err: any) {
       console.warn('Camera permission or device error:', err);
       const isDenied = err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError';
@@ -370,8 +408,8 @@ export const CctvMonitorTab: React.FC<CctvMonitorTabProps> = ({
       >
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-xs font-extrabold flex items-center gap-1.5">
-              <span>دوربین مداربسته و نظارت تصویری (CCTV Monitor)</span>
+            <h2 className="text-xs sm:text-sm font-extrabold flex items-center gap-1.5">
+              <span>دوربین مداربسته (CCTV)</span>
             </h2>
             <div className="flex items-center gap-1">
               <span className="text-[10px] bg-[#00F59B]/15 text-[#00F59B] px-2 py-0.5 rounded-full font-mono font-bold border border-[#00F59B]/30">
@@ -383,7 +421,7 @@ export const CctvMonitorTab: React.FC<CctvMonitorTabProps> = ({
             </div>
           </div>
           <p className={`text-[11px] mt-0.5 ${isDark ? 'text-[#94A3B8]' : 'text-slate-500'}`}>
-            مشاهده زنده تصویر، کنترل کامل سخت‌افزار دوربین و تماشای تمام‌صفحه
+            پایش زنده و کنترل دوربین در شبکه محلی
           </p>
         </div>
 
@@ -401,6 +439,43 @@ export const CctvMonitorTab: React.FC<CctvMonitorTabProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Camera Permission Request Box - ONLY shown until permission is granted */}
+      {cameraPermission !== 'granted' && (
+        <div
+          className={`p-2.5 rounded-xl border flex items-center justify-between text-xs shrink-0 transition-all ${
+            isDark
+              ? 'bg-[#1B1F28] border-[#262C38] text-white'
+              : 'bg-emerald-50 border-emerald-200 text-emerald-900 shadow-sm'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <Camera className="w-4 h-4 text-[#00F59B] shrink-0" />
+            <div>
+              <div className="font-bold text-[11px] flex items-center gap-1.5">
+                <span>مجوز دسترسی به دوربین (Camera Access)</span>
+                <span className="text-[10px] px-1.5 py-0.2 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-md font-bold">
+                  در انتظار تایید
+                </span>
+              </div>
+              <p className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                برای پخش تصویر زنده و پایش دوربین مداربسته در شبکه، تایید مجوز دوربین الزامی است.
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={handleRequestCameraPermission}
+            className={`px-3 py-1 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer border ${
+              isDark
+                ? 'bg-[#00F59B]/15 hover:bg-[#00F59B]/25 text-[#00F59B] border-[#00F59B]/30'
+                : 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600 shadow-sm'
+            }`}
+          >
+            تأیید مجوز دوربین
+          </button>
+        </div>
+      )}
 
       {/* 2. Active Camera Feeds Selector */}
       <div

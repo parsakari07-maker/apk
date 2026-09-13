@@ -199,7 +199,237 @@ dependencies {
 
     // 💾 6. ذخیره‌سازی ترجیحات کاربر و تم ظاهری با Jetpack DataStore
     implementation("androidx.datastore:datastore-preferences:1.1.1")
-}`
+}
+`
+  },
+
+  mainActivity: {
+    filename: 'MainActivity.kt',
+    path: 'app/src/main/java/com/localnet/netmaster/MainActivity.kt',
+    language: 'kotlin',
+    title: 'اکتیویتی اصلی، مدیریت تمام صفحه Edge-to-Edge و پل نیتیو مجوزهای سیستمی اندروید',
+    code: `package com.localnet.netmaster
+
+import android.Manifest
+import android.annotation.SuppressLint
+import android.content.pm.PackageManager
+import android.os.Build
+import android.os.Bundle
+import android.webkit.*
+import androidx.activity.ComponentActivity
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+
+/**
+ * 📱 اکتیویتی اصلی با اجرای تمام‌صفحه بدون نوار اضافه (Edge-to-Edge)
+ * و پل کامل ارتباطی بین وب‌ویو و مجوزهای سخت‌افزاری سیستمی اندروید
+ */
+class MainActivity : ComponentActivity() {
+
+    private lateinit var webView: WebView
+
+    // مدیریت مدرن دریافت چندگانه مجوزهای سیستمی اندروید
+    private val permissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissionsResult ->
+        permissionsResult.forEach { (permission, isGranted) ->
+            val shortName = when (permission) {
+                Manifest.permission.RECORD_AUDIO -> "microphone"
+                Manifest.permission.CAMERA -> "camera"
+                Manifest.permission.POST_NOTIFICATIONS -> "notification"
+                Manifest.permission.READ_EXTERNAL_STORAGE,
+                Manifest.permission.READ_MEDIA_IMAGES,
+                Manifest.permission.READ_MEDIA_VIDEO,
+                Manifest.permission.READ_MEDIA_AUDIO -> "storage"
+                else -> permission
+            }
+            // ارسال رویداد زنده مستقیم به لایه فرانت‌اند جهت مخفی‌سازی باکس درخواست مجوز
+            webView.post {
+                webView.evaluateJavascript(
+                    "if (window.dispatchEvent) { window.dispatchEvent(new CustomEvent('androidPermissionChanged', { detail: { permission: '$shortName', granted: $isGranted } })); }",
+                    null
+                )
+            }
+        }
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        // اجرای صددرصد تمام‌صفحه لبه‌به‌لبه بدون حاشیه و مدیریت هوشمند فواصل سیستمی (Edge-to-Edge Bug 8)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
+        webView = WebView(this).apply {
+            settings.apply {
+                javaScriptEnabled = true
+                domStorageEnabled = true
+                databaseEnabled = true
+                allowFileAccess = true
+                allowContentAccess = true
+                mediaPlaybackRequiresUserGesture = false
+            }
+
+            // مدیریت خودکار فاصله نوار وضعیت و نوار ناوبری پایین صفحه (System Bar Insets)
+            ViewCompat.setOnApplyWindowInsetsListener(this) { view, insets ->
+                val statusBar = insets.getInsets(WindowInsetsCompat.Type.statusBars())
+                val navBar = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
+                val cutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout())
+                
+                val topPad = maxOf(statusBar.top, cutout.top)
+                val bottomPad = maxOf(navBar.bottom, cutout.bottom)
+                
+                view.setPadding(0, topPad, 0, bottomPad)
+                insets
+            }
+
+            // تضمین اعطای دسترسی رسانه وب‌ویو به دوربین و میکروفون
+            webChromeClient = object : WebChromeClient() {
+                override fun onPermissionRequest(request: PermissionRequest) {
+                    runOnUiThread {
+                        request.grant(request.resources)
+                    }
+                }
+            }
+
+            webViewClient = object : WebViewClient() {}
+
+            // اتصال پل جاوااسکریپت به نام window.AndroidPermissions
+            addJavascriptInterface(AndroidPermissionsBridge(), "AndroidPermissions")
+        }
+
+        setContentView(webView)
+        webView.loadUrl("file:///android_asset/dist/index.html")
+    }
+
+    inner class AndroidPermissionsBridge {
+
+        @JavascriptInterface
+        fun getAllPermissionStates(): String {
+            val mic = hasMicrophonePermission()
+            val cam = hasCameraPermission()
+            val notif = hasNotificationPermission()
+            val storage = hasStoragePermission()
+            return "{\"microphone\":$mic,\"camera\":$cam,\"notification\":$notif,\"storage\":$storage}"
+        }
+
+        @JavascriptInterface
+        fun hasMicrophonePermission(): Boolean {
+            return ContextCompat.checkSelfPermission(
+                this@MainActivity,
+                Manifest.permission.RECORD_AUDIO
+            ) == PackageManager.PERMISSION_GRANTED
+        }
+
+        @JavascriptInterface
+        fun hasCameraPermission(): Boolean {
+            return ContextCompat.checkSelfPermission(
+                this@MainActivity,
+                Manifest.permission.CAMERA
+            ) == PackageManager.PERMISSION_GRANTED
+        }
+
+        @JavascriptInterface
+        fun hasNotificationPermission(): Boolean {
+            return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                ContextCompat.checkSelfPermission(
+                    this@MainActivity,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) == PackageManager.PERMISSION_GRANTED
+            } else {
+                true
+            }
+        }
+
+        @JavascriptInterface
+        fun hasStoragePermission(): Boolean {
+            return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                ContextCompat.checkSelfPermission(
+                    this@MainActivity,
+                    Manifest.permission.READ_MEDIA_IMAGES
+                ) == PackageManager.PERMISSION_GRANTED
+            } else {
+                ContextCompat.checkSelfPermission(
+                    this@MainActivity,
+                    Manifest.permission.READ_EXTERNAL_STORAGE
+                ) == PackageManager.PERMISSION_GRANTED
+            }
+        }
+
+        @JavascriptInterface
+        fun requestMicrophone(): Boolean {
+            runOnUiThread {
+                permissionLauncher.launch(arrayOf(Manifest.permission.RECORD_AUDIO))
+            }
+            return true
+        }
+
+        @JavascriptInterface
+        fun requestCamera(): Boolean {
+            runOnUiThread {
+                permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA))
+            }
+            return true
+        }
+
+        @JavascriptInterface
+        fun requestNotification(): Boolean {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                runOnUiThread {
+                    permissionLauncher.launch(arrayOf(Manifest.permission.POST_NOTIFICATIONS))
+                }
+            }
+            return true
+        }
+
+        @JavascriptInterface
+        fun requestStorage(): Boolean {
+            val perms = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                arrayOf(
+                    Manifest.permission.READ_MEDIA_IMAGES,
+                    Manifest.permission.READ_MEDIA_VIDEO,
+                    Manifest.permission.READ_MEDIA_AUDIO
+                )
+            } else {
+                arrayOf(
+                    Manifest.permission.READ_EXTERNAL_STORAGE,
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE
+                )
+            }
+            runOnUiThread {
+                permissionLauncher.launch(perms)
+            }
+            return true
+        }
+
+        @JavascriptInterface
+        fun requestAllPermissions(): Boolean {
+            val list = mutableListOf(
+                Manifest.permission.RECORD_AUDIO,
+                Manifest.permission.CAMERA,
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            )
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                list.add(Manifest.permission.POST_NOTIFICATIONS)
+                list.add(Manifest.permission.READ_MEDIA_IMAGES)
+                list.add(Manifest.permission.READ_MEDIA_VIDEO)
+                list.add(Manifest.permission.READ_MEDIA_AUDIO)
+            } else {
+                list.add(Manifest.permission.READ_EXTERNAL_STORAGE)
+                list.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            }
+            runOnUiThread {
+                permissionLauncher.launch(list.toTypedArray())
+            }
+            return true
+        }
+    }
+}
+`
   },
 
   themeManager: {
@@ -696,7 +926,7 @@ enum class NetMasterModule(val label: String, val icon: ImageVector, val accentC
 fun NetMasterMainScreen(
     viewModel: NetMasterViewModel
 ) {
-    var currentModule by remember { mutableStateOf(NetMasterModule.RADAR) }
+    var currentModule by remember { mutableStateOf(NetMasterModule.WALKIE) }
     val uiState by viewModel.uiState.collectAsState()
 
     CompositionLocalProvider(androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Rtl) {

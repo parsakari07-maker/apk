@@ -159,16 +159,12 @@ gradle %*
 `
   );
 
-  // 5. App Module build configuration
-  zip.file('app/build.gradle.kts', ANDROID_FILES.gradle.code);
-  zip.file('app/src/main/AndroidManifest.xml', ANDROID_FILES.manifest.code);
+  // 5. App Module & Source Kotlin files from ANDROID_FILES
+  Object.values(ANDROID_FILES).forEach((file) => {
+    zip.file(file.path, file.code);
+  });
 
-  // 6. Source Kotlin files
-  zip.file('app/src/main/java/com/localnet/netmaster/network/WalkieTalkieEngine.kt', ANDROID_FILES.walkieEngine.code);
-  zip.file('app/src/main/java/com/localnet/netmaster/cctv/CctvStealthEngine.kt', ANDROID_FILES.cctvStealth.code);
-  zip.file('app/src/main/java/com/localnet/netmaster/airdrop/LocalAirDropEngine.kt', ANDROID_FILES.airDropEngine.code);
-
-  // Theme & Settings Kotlin
+  // 6. Theme & Settings Kotlin (additional standalone compatibility helpers)
   zip.file(
     'app/src/main/java/com/localnet/netmaster/theme/ThemeManager.kt',
     `package com.localnet.netmaster.theme

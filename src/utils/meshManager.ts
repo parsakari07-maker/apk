@@ -184,6 +184,14 @@ class MeshNetworkManager {
   private initTransport() {
     // 1. Android Native Network Bridge listener
     if (typeof window !== 'undefined') {
+      try {
+        if ((window as any).AndroidNetwork && typeof (window as any).AndroidNetwork.startListening === 'function') {
+          (window as any).AndroidNetwork.startListening(8888);
+        }
+      } catch (e) {
+        console.warn('[Mesh] AndroidNetwork startListening call error:', e);
+      }
+
       window.addEventListener('androidNetworkPacket', (e: any) => {
         try {
           const detail = e.detail;

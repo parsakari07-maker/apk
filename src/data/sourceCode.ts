@@ -200,6 +200,29 @@ dependencies {
 
     // 💾 6. ذخیره‌سازی ترجیحات کاربر و تم ظاهری با Jetpack DataStore
     implementation("androidx.datastore:datastore-preferences:1.1.1")
+
+    // 🌐 7. WebView Asset Loader برای بارگذاری امن محلی و فعال‌سازی کامل getUserMedia و دسترسی سنسورها
+    implementation("androidx.webkit:webkit:1.12.1")
+}
+`
+  },
+
+  netMasterApp: {
+    filename: 'NetMasterApp.kt',
+    path: 'app/src/main/java/com/localnet/netmaster/NetMasterApp.kt',
+    language: 'kotlin',
+    title: 'کلاس اصلی اپلیکیشن اندروید (Application Base Class)',
+    code: `package com.localnet.netmaster
+
+import android.app.Application
+
+/**
+ * 🚀 کلاس اصلی اپلیکیشن برای مقداردهی اولیه‌ی سرویس‌ها و تنظیمات سیستمی
+ */
+class NetMasterApp : Application() {
+    override fun onCreate() {
+        super.onCreate()
+    }
 }
 `
   },
@@ -208,14 +231,16 @@ dependencies {
     filename: 'MainActivity.kt',
     path: 'app/src/main/java/com/localnet/netmaster/MainActivity.kt',
     language: 'kotlin',
-    title: 'اکتیویتی اصلی، مدیریت تمام صفحه Edge-to-Edge و پل نیتیو مجوزهای سیستمی اندروید',
+    title: 'اکتیویتی اصلی، مدیریت تمام صفحه Edge-to-Edge، بارگذاری امن با WebViewAssetLoader و پل ارتباطی UDP و مجوزها',
     code: `package com.localnet.netmaster
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -226,15 +251,25 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.webkit.WebViewAssetLoader
+import org.json.JSONObject
+import java.net.DatagramPacket
+import java.net.DatagramSocket
+import java.net.Inet4Address
+import java.net.InetAddress
+import java.net.InetSocketAddress
+import java.net.NetworkInterface
 
 /**
  * 📱 اکتیویتی اصلی با اجرای تمام‌صفحه بدون نوار اضافه (Edge-to-Edge)
- * و پل کامل ارتباطی بین وب‌ویو و مجوزهای سخت‌افزاری سیستمی اندروید
+ * بارگذاری امن محلی با WebViewAssetLoader جهت فعال‌سازی getUserMedia و وب‌کم/میکروفون
+ * و پل کامل ارتباطی بین وب‌ویو و سوکت‌های UDP و مجوزهای سخت‌افزاری اندروید
  */
 class MainActivity : ComponentActivity() {
 
     private lateinit var webView: WebView
     private var pendingPermissionRequest: PermissionRequest? = null
+    private val networkBridge = AndroidNetworkBridge()
 
     // مدیریت دریافت چندگانه مجوزهای سیستمی اندروید با ActivityResultContracts
     private val permissionLauncher = registerForActivityResult(
@@ -352,6 +387,11 @@ class MainActivity : ComponentActivity() {
         // اجرای صددرصد تمام‌صفحه لبه‌به‌لبه بدون حاشیه (Edge-to-Edge)
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
+        // پیکربندی استاندارد WebViewAssetLoader برای پشتیبانی معتبر از پروتکل امن و اجازه اجرای WebRTC/getUserMedia
+        val assetLoader = WebViewAssetLoader.Builder()
+            .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
+            .build()
+
         webView = WebView(this).apply {
             settings.apply {
                 javaScriptEnabled = true
@@ -400,30 +440,117 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            webViewClient = object : WebViewClient() {}
+            webViewClient = object : WebViewClient() {
+                override fun shouldInterceptRequest(
+                    view: WebView,
+                    request: WebResourceRequest
+                ): WebResourceResponse? {
+                    return assetLoader.shouldInterceptRequest(request.url)
+                }
+            }
 
             // اتصال پل جاوااسکریپت به نام window.AndroidPermissions و window.AndroidNetwork
             addJavascriptInterface(AndroidPermissionsBridge(), "AndroidPermissions")
-            addJavascriptInterface(AndroidNetworkBridge(), "AndroidNetwork")
+            addJavascriptInterface(networkBridge, "AndroidNetwork")
         }
 
         setContentView(webView)
-        webView.loadUrl("file:///android_asset/dist/index.html")
+        webView.loadUrl("https://appassets.androidplatform.net/assets/dist/index.html")
+
+        // آغاز خودکار شنود سوکت UDP روی پورت استاندارد ۸۸۸۸
+        networkBridge.startListening(8888)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        networkBridge.stopListening()
     }
 
     inner class AndroidNetworkBridge {
+        private var multicastLock: WifiManager.MulticastLock? = null
+        private var isListening = false
+        private var listenSocket: DatagramSocket? = null
+        private var listenThread: Thread? = null
+
+        @JavascriptInterface
+        fun startListening(port: Int): Boolean {
+            if (isListening) return true
+
+            try {
+                val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+                multicastLock = wifiManager?.createMulticastLock("NetMasterMulticastLock")?.apply {
+                    setReferenceCounted(true)
+                    acquire()
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+
+            isListening = true
+            listenThread = Thread {
+                try {
+                    listenSocket = DatagramSocket(null).apply {
+                        reuseAddress = true
+                        broadcast = true
+                        bind(InetSocketAddress(port))
+                    }
+                    val buffer = ByteArray(65535)
+                    while (isListening && listenSocket?.isClosed == false) {
+                        val packet = DatagramPacket(buffer, buffer.size)
+                        listenSocket?.receive(packet)
+                        val senderIp = packet.address?.hostAddress ?: ""
+                        val senderPort = packet.port
+                        val message = String(packet.data, packet.offset, packet.length, Charsets.UTF_8)
+                        val quotedData = JSONObject.quote(message)
+
+                        runOnUiThread {
+                            webView.evaluateJavascript(
+                                "if (window.dispatchEvent) { window.dispatchEvent(new CustomEvent('androidNetworkPacket', { detail: { data: $quotedData, senderIp: '$senderIp', senderPort: $senderPort } })); }",
+                                null
+                            )
+                        }
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }.apply {
+                isDaemon = true
+                start()
+            }
+            return true
+        }
+
+        @JavascriptInterface
+        fun stopListening(): Boolean {
+            isListening = false
+            try {
+                listenSocket?.close()
+                listenSocket = null
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            try {
+                multicastLock?.let {
+                    if (it.isHeld) it.release()
+                }
+                multicastLock = null
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            return true
+        }
 
         @JavascriptInterface
         fun getWifiIpAddress(): String {
             try {
-                val interfaces = java.net.NetworkInterface.getNetworkInterfaces()
+                val interfaces = NetworkInterface.getNetworkInterfaces()
                 while (interfaces.hasMoreElements()) {
                     val networkInterface = interfaces.nextElement()
                     if (networkInterface.isLoopback || !networkInterface.isUp) continue
                     val addresses = networkInterface.inetAddresses
                     while (addresses.hasMoreElements()) {
                         val addr = addresses.nextElement()
-                        if (!addr.isLoopbackAddress && addr is java.net.Inet4Address) {
+                        if (!addr.isLoopbackAddress && addr is Inet4Address) {
                             return addr.hostAddress ?: "192.168.1.104"
                         }
                     }
@@ -443,12 +570,38 @@ class MainActivity : ComponentActivity() {
         fun sendUdpBroadcast(payload: String, port: Int): Boolean {
             Thread {
                 try {
-                    val socket = java.net.DatagramSocket()
+                    val socket = DatagramSocket()
                     socket.broadcast = true
                     val data = payload.toByteArray(Charsets.UTF_8)
-                    val target = java.net.InetAddress.getByName("255.255.255.255")
-                    val packet = java.net.DatagramPacket(data, data.size, target, port)
-                    socket.send(packet)
+                    val broadcastAddresses = mutableSetOf<InetAddress>()
+
+                    try {
+                        val interfaces = NetworkInterface.getNetworkInterfaces()
+                        while (interfaces.hasMoreElements()) {
+                            val networkInterface = interfaces.nextElement()
+                            if (networkInterface.isLoopback || !networkInterface.isUp) continue
+                            for (interfaceAddress in networkInterface.interfaceAddresses) {
+                                val broadcast = interfaceAddress.broadcast
+                                if (broadcast != null) {
+                                    broadcastAddresses.add(broadcast)
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+
+                    // افزوده شدن آدرس برادکست استاندارد عمومی به عنوان فال‌بک
+                    broadcastAddresses.add(InetAddress.getByName("255.255.255.255"))
+
+                    for (target in broadcastAddresses) {
+                        try {
+                            val packet = DatagramPacket(data, data.size, target, port)
+                            socket.send(packet)
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    }
                     socket.close()
                 } catch (e: Exception) {
                     e.printStackTrace()
@@ -461,10 +614,10 @@ class MainActivity : ComponentActivity() {
         fun sendUdpPacket(targetIp: String, port: Int, payload: String): Boolean {
             Thread {
                 try {
-                    val socket = java.net.DatagramSocket()
+                    val socket = DatagramSocket()
                     val data = payload.toByteArray(Charsets.UTF_8)
-                    val target = java.net.InetAddress.getByName(targetIp)
-                    val packet = java.net.DatagramPacket(data, data.size, target, port)
+                    val target = InetAddress.getByName(targetIp)
+                    val packet = DatagramPacket(data, data.size, target, port)
                     socket.send(packet)
                     socket.close()
                 } catch (e: Exception) {

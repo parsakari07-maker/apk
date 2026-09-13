@@ -13,7 +13,9 @@ import {
   ShieldCheck,
   Zap,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  Settings,
+  Layers
 } from 'lucide-react';
 import { UserProfile } from '../types';
 import { detectLocalNetworkAndRole } from '../utils/networkDetector';
@@ -23,6 +25,10 @@ import {
   requestCameraPermission,
   requestNotificationPermission,
   requestBackgroundPermission,
+  requestAllInitialPermissions,
+  openNativeAppSettings,
+  subscribePermissionChanges,
+  isAndroidNative,
   DevicePermissionStatus
 } from '../utils/systemPermissions';
 
@@ -54,7 +60,9 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
   const [requestingMic, setRequestingMic] = useState(false);
   const [requestingCamera, setRequestingCamera] = useState(false);
   const [requestingBg, setRequestingBg] = useState(false);
+  const [requestingAll, setRequestingAll] = useState(false);
   const [permissionNotice, setPermissionNotice] = useState<string | null>(null);
+  const [hasPermanentlyDenied, setHasPermanentlyDenied] = useState(false);
 
   // Automatic Network Role & IP Detection State (Auto handled in background, NOT chosen manually)
   const [detectedRole, setDetectedRole] = useState<'host' | 'client'>(profile.role || 'client');
@@ -69,6 +77,8 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
       setCameraStatus(status.camera);
       if (status.notification === 'granted' || status.wakeLock) {
         setBgStatus('granted');
+      } else if (status.notification === 'denied') {
+        setBgStatus('denied');
       }
     } catch {
       // Ignore
@@ -79,17 +89,52 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
     if (!isOpen) return;
     refreshStatus();
 
+    const unsubscribe = subscribePermissionChanges((status) => {
+      setMicStatus(status.microphone);
+      setCameraStatus(status.camera);
+      if (status.notification === 'granted' || status.wakeLock) {
+        setBgStatus('granted');
+      } else if (status.notification === 'denied') {
+        setBgStatus('denied');
+      }
+    });
+
     // Auto-detect role and IP silently
     detectLocalNetworkAndRole().then((info) => {
       setDetectedRole(info.role);
       setDetectedIp(info.localIp);
       setDetectedSsid(info.networkSsid);
     });
+
+    return () => unsubscribe();
   }, [isOpen]);
 
   if (!isOpen) return null;
 
   const isNameValid = username.trim().length >= 2;
+
+  // Master 1-tap Request All Permissions
+  const handleRequestAll = async () => {
+    setRequestingAll(true);
+    setPermissionNotice(null);
+    try {
+      const res = await requestAllInitialPermissions();
+      if (res.microphone.status === 'granted') setMicStatus('granted');
+      if (res.camera.status === 'granted') setCameraStatus('granted');
+      if (res.notifications.status === 'granted' || res.wakeLock) setBgStatus('granted');
+
+      if (res.microphone.permanentlyDenied || res.camera.permanentlyDenied) {
+        setHasPermanentlyDenied(true);
+      }
+
+      setPermissionNotice('درخواست مجوزها به سیستم‌عامل اندروید ارسال شد.');
+    } catch (e: any) {
+      setPermissionNotice(e?.message || 'خطا در ثبت درخواست مجوزها');
+    } finally {
+      setRequestingAll(false);
+      refreshStatus();
+    }
+  };
 
   // Direct 1-tap real microphone prompt
   const handleRequestMic = async () => {
@@ -97,11 +142,12 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
     setPermissionNotice(null);
     try {
       const res = await requestMicrophonePermission();
-      if (res.success) {
+      if (res.success || res.status === 'granted') {
         setMicStatus('granted');
-        setPermissionNotice('مجوز میکروفون با موفقیت توسط گوشی صادر شد.');
+        setPermissionNotice('مجوز میکروفون با موفقیت توسط سیستم‌عامل صادر شد.');
       } else {
         setMicStatus('denied');
+        if (res.permanentlyDenied) setHasPermanentlyDenied(true);
         setPermissionNotice(res.error || 'دسترسی میکروفون رد شد.');
       }
     } catch (e: any) {
@@ -109,6 +155,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
       setPermissionNotice(e?.message || 'خطا در صدور مجوز میکروفون');
     } finally {
       setRequestingMic(false);
+      refreshStatus();
     }
   };
 
@@ -118,11 +165,12 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
     setPermissionNotice(null);
     try {
       const res = await requestCameraPermission();
-      if (res.success) {
+      if (res.success || res.status === 'granted') {
         setCameraStatus('granted');
-        setPermissionNotice('مجوز دوربین با موفقیت توسط گوشی صادر شد.');
+        setPermissionNotice('مجوز دوربین با موفقیت توسط سیستم‌عامل صادر شد.');
       } else {
         setCameraStatus('denied');
+        if (res.permanentlyDenied) setHasPermanentlyDenied(true);
         setPermissionNotice(res.error || 'دسترسی دوربین رد شد.');
       }
     } catch (e: any) {
@@ -130,6 +178,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
       setPermissionNotice(e?.message || 'خطا در صدور مجوز دوربین');
     } finally {
       setRequestingCamera(false);
+      refreshStatus();
     }
   };
 
@@ -150,7 +199,12 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
       setPermissionNotice(e?.message || 'خطا در فعال‌سازی سرویس پس‌زمینه');
     } finally {
       setRequestingBg(false);
+      refreshStatus();
     }
+  };
+
+  const handleOpenSettings = () => {
+    openNativeAppSettings();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -200,6 +254,8 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
     setIsSubmitting(false);
     if (onClose) onClose();
   };
+
+  const allGranted = micStatus === 'granted' && cameraStatus === 'granted' && bgStatus === 'granted';
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
@@ -268,9 +324,31 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                 مجوزهای سخت‌افزاری مورد نیاز:
               </label>
               <span className="text-[10px] text-[#00F59B] font-mono font-bold">
-                درخواست مستقیم از سیستم‌عامل
+                {isAndroidNative() ? 'اتصال مستقیم به اندروید' : 'API مرورگر / PWA'}
               </span>
             </div>
+
+            {/* Master 1-Tap Request All Button */}
+            {!allGranted && (
+              <button
+                type="button"
+                onClick={handleRequestAll}
+                disabled={requestingAll}
+                className="w-full py-2.5 px-3 rounded-2xl bg-gradient-to-r from-[#00F59B] to-[#4CC9F0] text-[#0A0D14] font-extrabold text-xs shadow-md hover:opacity-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {requestingAll ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>در حال فراخوانی دیالوگ سیستم‌عامل...</span>
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>درخواست یکجای کلیه مجوزها (Request Permissions)</span>
+                  </>
+                )}
+              </button>
+            )}
 
             {/* 1. Direct Microphone Permission Prompt Button */}
             <div
@@ -473,6 +551,23 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
               </div>
             </div>
           </div>
+
+          {/* Fallback to App Settings if permanently denied */}
+          {hasPermanentlyDenied && isAndroidNative() && (
+            <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-2">
+              <div className="text-[11px] text-amber-300">
+                برخی مجوزها مسدود شده‌اند. برای فعال‌سازی به تنظیمات اندروید بروید:
+              </div>
+              <button
+                type="button"
+                onClick={handleOpenSettings}
+                className="px-3 py-1.5 rounded-xl bg-amber-500 text-black font-bold text-xs flex items-center gap-1 cursor-pointer shrink-0"
+              >
+                <Settings className="w-3.5 h-3.5" />
+                <span>تنظیمات</span>
+              </button>
+            </div>
+          )}
 
           {/* Feedback message if any */}
           {permissionNotice && (

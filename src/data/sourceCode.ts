@@ -30,6 +30,7 @@ export const ANDROID_FILES = {
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" android:usesPermissionFlags="neverForLocation" tools:targetApi="33" />
 
     <!-- 📡 4. سنسورها و موقعیت‌یابی محلی (Wi-Fi RSSI Radar & Compass Gyroscope) -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
@@ -212,9 +213,12 @@ dependencies {
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.webkit.*
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
@@ -230,37 +234,122 @@ import androidx.core.view.WindowInsetsCompat
 class MainActivity : ComponentActivity() {
 
     private lateinit var webView: WebView
+    private var pendingPermissionRequest: PermissionRequest? = null
 
-    // مدیریت مدرن دریافت چندگانه مجوزهای سیستمی اندروید
+    // مدیریت دریافت چندگانه مجوزهای سیستمی اندروید با ActivityResultContracts
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissionsResult ->
-        permissionsResult.forEach { (permission, isGranted) ->
-            val shortName = when (permission) {
-                Manifest.permission.RECORD_AUDIO -> "microphone"
-                Manifest.permission.CAMERA -> "camera"
-                Manifest.permission.POST_NOTIFICATIONS -> "notification"
-                Manifest.permission.READ_EXTERNAL_STORAGE,
-                Manifest.permission.READ_MEDIA_IMAGES,
-                Manifest.permission.READ_MEDIA_VIDEO,
-                Manifest.permission.READ_MEDIA_AUDIO -> "storage"
-                else -> permission
+        runOnUiThread {
+            val micGranted = hasMicrophonePermission()
+            val camGranted = hasCameraPermission()
+
+            // پاسخ دقیق به درخواست رسانه‌ای وب‌ویو
+            pendingPermissionRequest?.let { req ->
+                val grantedList = mutableListOf<String>()
+                for (res in req.resources) {
+                    if (res == PermissionRequest.RESOURCE_AUDIO_CAPTURE && micGranted) {
+                        grantedList.add(PermissionRequest.RESOURCE_AUDIO_CAPTURE)
+                    }
+                    if (res == PermissionRequest.RESOURCE_VIDEO_CAPTURE && camGranted) {
+                        grantedList.add(PermissionRequest.RESOURCE_VIDEO_CAPTURE)
+                    }
+                }
+                if (grantedList.isNotEmpty()) {
+                    req.grant(grantedList.toTypedArray())
+                } else {
+                    req.deny()
+                }
+                pendingPermissionRequest = null
             }
-            // ارسال رویداد زنده مستقیم به لایه فرانت‌اند جهت مخفی‌سازی باکس درخواست مجوز
-            webView.post {
+
+            // مخابره رویداد وضعیت زنده مجوزها به لایه جاوااسکریپت و React UI
+            permissionsResult.forEach { (permission, isGranted) ->
+                val shortName = when (permission) {
+                    Manifest.permission.RECORD_AUDIO -> "microphone"
+                    Manifest.permission.CAMERA -> "camera"
+                    Manifest.permission.POST_NOTIFICATIONS -> "notification"
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION -> "location"
+                    Manifest.permission.READ_EXTERNAL_STORAGE,
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE,
+                    Manifest.permission.READ_MEDIA_IMAGES,
+                    Manifest.permission.READ_MEDIA_VIDEO,
+                    Manifest.permission.READ_MEDIA_AUDIO -> "storage"
+                    else -> permission
+                }
+
+                val permanentlyDenied = !isGranted && !shouldShowRequestPermissionRationale(permission)
+
                 webView.evaluateJavascript(
-                    "if (window.dispatchEvent) { window.dispatchEvent(new CustomEvent('androidPermissionChanged', { detail: { permission: '$shortName', granted: $isGranted } })); }",
+                    "if (window.dispatchEvent) { window.dispatchEvent(new CustomEvent('androidPermissionChanged', { detail: { permission: '$shortName', granted: $isGranted, permanentlyDenied: $permanentlyDenied } })); }",
                     null
                 )
             }
+
+            // ارسال رویداد جامع اتمام بسته مجوزها
+            webView.evaluateJavascript(
+                "if (window.dispatchEvent) { window.dispatchEvent(new CustomEvent('androidPermissionChanged', { detail: { permission: 'all', granted: true } })); }",
+                null
+            )
         }
+    }
+
+    fun hasMicrophonePermission(): Boolean {
+        return ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    fun hasCameraPermission(): Boolean {
+        return ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.CAMERA
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    fun hasNotificationPermission(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
+    }
+
+    fun hasStoragePermission(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.READ_MEDIA_IMAGES
+            ) == PackageManager.PERMISSION_GRANTED
+        } else {
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.READ_EXTERNAL_STORAGE
+            ) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    fun hasLocationPermission(): Boolean {
+        return ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED ||
+        ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
     }
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // اجرای صددرصد تمام‌صفحه لبه‌به‌لبه بدون حاشیه و مدیریت هوشمند فواصل سیستمی (Edge-to-Edge Bug 8)
+        // اجرای صددرصد تمام‌صفحه لبه‌به‌لبه بدون حاشیه (Edge-to-Edge)
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
         webView = WebView(this).apply {
@@ -286,26 +375,110 @@ class MainActivity : ComponentActivity() {
                 insets
             }
 
-            // تضمین اعطای دسترسی رسانه وب‌ویو به دوربین و میکروفون
+            // مدیریت دقیق درخواست‌های مجوز درون وب‌ویو متصل به سیستم‌عامل اندروید
             webChromeClient = object : WebChromeClient() {
                 override fun onPermissionRequest(request: PermissionRequest) {
                     runOnUiThread {
-                        request.grant(request.resources)
+                        val needed = mutableListOf<String>()
+                        for (res in request.resources) {
+                            if (res == PermissionRequest.RESOURCE_AUDIO_CAPTURE && !hasMicrophonePermission()) {
+                                needed.add(Manifest.permission.RECORD_AUDIO)
+                            }
+                            if (res == PermissionRequest.RESOURCE_VIDEO_CAPTURE && !hasCameraPermission()) {
+                                needed.add(Manifest.permission.CAMERA)
+                            }
+                        }
+
+                        if (needed.isEmpty()) {
+                            // فقط منابع درخواست شده را تأیید می‌کند
+                            request.grant(request.resources)
+                        } else {
+                            pendingPermissionRequest = request
+                            permissionLauncher.launch(needed.toTypedArray())
+                        }
                     }
                 }
             }
 
             webViewClient = object : WebViewClient() {}
 
-            // اتصال پل جاوااسکریپت به نام window.AndroidPermissions
+            // اتصال پل جاوااسکریپت به نام window.AndroidPermissions و window.AndroidNetwork
             addJavascriptInterface(AndroidPermissionsBridge(), "AndroidPermissions")
+            addJavascriptInterface(AndroidNetworkBridge(), "AndroidNetwork")
         }
 
         setContentView(webView)
         webView.loadUrl("file:///android_asset/dist/index.html")
     }
 
+    inner class AndroidNetworkBridge {
+
+        @JavascriptInterface
+        fun getWifiIpAddress(): String {
+            try {
+                val interfaces = java.net.NetworkInterface.getNetworkInterfaces()
+                while (interfaces.hasMoreElements()) {
+                    val networkInterface = interfaces.nextElement()
+                    if (networkInterface.isLoopback || !networkInterface.isUp) continue
+                    val addresses = networkInterface.inetAddresses
+                    while (addresses.hasMoreElements()) {
+                        val addr = addresses.nextElement()
+                        if (!addr.isLoopbackAddress && addr is java.net.Inet4Address) {
+                            return addr.hostAddress ?: "192.168.1.104"
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            return "192.168.1.104"
+        }
+
+        @JavascriptInterface
+        fun getWifiSsid(): String {
+            return "شبکه محلی (Wi-Fi Local)"
+        }
+
+        @JavascriptInterface
+        fun sendUdpBroadcast(payload: String, port: Int): Boolean {
+            Thread {
+                try {
+                    val socket = java.net.DatagramSocket()
+                    socket.broadcast = true
+                    val data = payload.toByteArray(Charsets.UTF_8)
+                    val target = java.net.InetAddress.getByName("255.255.255.255")
+                    val packet = java.net.DatagramPacket(data, data.size, target, port)
+                    socket.send(packet)
+                    socket.close()
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }.start()
+            return true
+        }
+
+        @JavascriptInterface
+        fun sendUdpPacket(targetIp: String, port: Int, payload: String): Boolean {
+            Thread {
+                try {
+                    val socket = java.net.DatagramSocket()
+                    val data = payload.toByteArray(Charsets.UTF_8)
+                    val target = java.net.InetAddress.getByName(targetIp)
+                    val packet = java.net.DatagramPacket(data, data.size, target, port)
+                    socket.send(packet)
+                    socket.close()
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }.start()
+            return true
+        }
+    }
+
     inner class AndroidPermissionsBridge {
+
+        @JavascriptInterface
+        fun isNativeAndroid(): Boolean = true
 
         @JavascriptInterface
         fun getAllPermissionStates(): String {
@@ -313,50 +486,33 @@ class MainActivity : ComponentActivity() {
             val cam = hasCameraPermission()
             val notif = hasNotificationPermission()
             val storage = hasStoragePermission()
-            return "{\"microphone\":$mic,\"camera\":$cam,\"notification\":$notif,\"storage\":$storage}"
+            val location = hasLocationPermission()
+            return "{\"microphone\":$mic,\"camera\":$cam,\"notification\":$notif,\"storage\":$storage,\"location\":$location}"
         }
 
         @JavascriptInterface
         fun hasMicrophonePermission(): Boolean {
-            return ContextCompat.checkSelfPermission(
-                this@MainActivity,
-                Manifest.permission.RECORD_AUDIO
-            ) == PackageManager.PERMISSION_GRANTED
+            return this@MainActivity.hasMicrophonePermission()
         }
 
         @JavascriptInterface
         fun hasCameraPermission(): Boolean {
-            return ContextCompat.checkSelfPermission(
-                this@MainActivity,
-                Manifest.permission.CAMERA
-            ) == PackageManager.PERMISSION_GRANTED
+            return this@MainActivity.hasCameraPermission()
         }
 
         @JavascriptInterface
         fun hasNotificationPermission(): Boolean {
-            return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                ContextCompat.checkSelfPermission(
-                    this@MainActivity,
-                    Manifest.permission.POST_NOTIFICATIONS
-                ) == PackageManager.PERMISSION_GRANTED
-            } else {
-                true
-            }
+            return this@MainActivity.hasNotificationPermission()
         }
 
         @JavascriptInterface
         fun hasStoragePermission(): Boolean {
-            return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                ContextCompat.checkSelfPermission(
-                    this@MainActivity,
-                    Manifest.permission.READ_MEDIA_IMAGES
-                ) == PackageManager.PERMISSION_GRANTED
-            } else {
-                ContextCompat.checkSelfPermission(
-                    this@MainActivity,
-                    Manifest.permission.READ_EXTERNAL_STORAGE
-                ) == PackageManager.PERMISSION_GRANTED
-            }
+            return this@MainActivity.hasStoragePermission()
+        }
+
+        @JavascriptInterface
+        fun hasLocationPermission(): Boolean {
+            return this@MainActivity.hasLocationPermission()
         }
 
         @JavascriptInterface
@@ -406,6 +562,18 @@ class MainActivity : ComponentActivity() {
         }
 
         @JavascriptInterface
+        fun requestLocation(): Boolean {
+            val perms = arrayOf(
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            )
+            runOnUiThread {
+                permissionLauncher.launch(perms)
+            }
+            return true
+        }
+
+        @JavascriptInterface
         fun requestAllPermissions(): Boolean {
             val list = mutableListOf(
                 Manifest.permission.RECORD_AUDIO,
@@ -426,6 +594,39 @@ class MainActivity : ComponentActivity() {
                 permissionLauncher.launch(list.toTypedArray())
             }
             return true
+        }
+
+        @JavascriptInterface
+        fun openAppSettings(): Boolean {
+            runOnUiThread {
+                try {
+                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = Uri.fromParts("package", packageName, null)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+            return true
+        }
+
+        @JavascriptInterface
+        fun shouldShowRationale(permission: String): Boolean {
+            val androidPerm = when (permission) {
+                "microphone" -> Manifest.permission.RECORD_AUDIO
+                "camera" -> Manifest.permission.CAMERA
+                "notification" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.POST_NOTIFICATIONS else ""
+                "storage" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
+                "location" -> Manifest.permission.ACCESS_FINE_LOCATION
+                else -> permission
+            }
+            return if (androidPerm.isNotEmpty()) {
+                shouldShowRequestPermissionRationale(androidPerm)
+            } else {
+                false
+            }
         }
     }
 }

@@ -1,7 +1,6 @@
 // networkDetector.ts
 // Automatic detection of network interface and role (Host vs Client)
-// Uses WebRTC ICE candidate local IP discovery to determine whether the device
-// is acting as a Hotspot / Gateway (e.g., .1 IP like 192.168.43.1 / 192.168.1.1) or a connected Client/Guest.
+// Queries native Android network bridge when available, or WebRTC ICE candidates in browser.
 
 export interface DetectedNetworkInfo {
   role: 'host' | 'client';
@@ -22,8 +21,37 @@ export function isGatewayIp(ip: string): boolean {
   return false;
 }
 
-// Discover local network IP via WebRTC ICE candidate gathering (Standard browser API)
+// Discover local network IP and role
 export async function detectLocalNetworkAndRole(): Promise<DetectedNetworkInfo> {
+  // 1. Check Native Android Bridge if present
+  if (typeof window !== 'undefined' && (window as any).AndroidNetwork) {
+    try {
+      const nativeIp = (window as any).AndroidNetwork.getWifiIpAddress();
+      const nativeSsid = (window as any).AndroidNetwork.getWifiSsid() || 'شبکه محلی Wi-Fi';
+      if (nativeIp && nativeIp !== '0.0.0.0' && nativeIp !== '127.0.0.1') {
+        const isHost = isGatewayIp(nativeIp);
+        const parts = nativeIp.split('.');
+        const subnet = `${parts[0]}.${parts[1]}.${parts[2]}.0/24`;
+        const isAndroidHotspot = nativeIp.startsWith('192.168.43.');
+
+        return {
+          role: isHost ? 'host' : 'client',
+          localIp: nativeIp,
+          networkSsid: isAndroidHotspot
+            ? 'هات‌اسپات اندروید (Hotspot AP)'
+            : isHost
+            ? 'شبکه محلی میزبان (Host AP)'
+            : nativeSsid,
+          isHotspotGateway: isHost,
+          subnet,
+        };
+      }
+    } catch (e) {
+      console.warn('[NetworkDetector] Native bridge IP check error:', e);
+    }
+  }
+
+  // 2. WebRTC ICE Candidate Discovery for standard browser environment
   return new Promise((resolve) => {
     let resolved = false;
 
@@ -31,7 +59,6 @@ export async function detectLocalNetworkAndRole(): Promise<DetectedNetworkInfo> 
     const timeout = setTimeout(() => {
       if (!resolved) {
         resolved = true;
-        // Check navigator.connection if available
         resolve({
           role: 'client',
           localIp: '192.168.1.104',
@@ -65,11 +92,9 @@ export async function detectLocalNetworkAndRole(): Promise<DetectedNetworkInfo> 
       pc.onicecandidate = (e) => {
         if (!e || !e.candidate || !e.candidate.candidate) return;
         const candidateStr = e.candidate.candidate;
-        // Match IPv4 addresses
         const ipMatch = candidateStr.match(/([0-9]{1,3}(\.[0-9]{1,3}){3})/);
         if (ipMatch) {
           const foundIp = ipMatch[1];
-          // Filter out loopback or public stun if possible, focus on private subnets
           if (
             foundIp.startsWith('192.168.') ||
             foundIp.startsWith('10.') ||
@@ -78,7 +103,7 @@ export async function detectLocalNetworkAndRole(): Promise<DetectedNetworkInfo> 
             if (!resolved) {
               resolved = true;
               clearTimeout(timeout);
-              pc.close();
+              try { pc.close(); } catch {}
 
               const isHost = isGatewayIp(foundIp);
               const subnetParts = foundIp.split('.');
@@ -103,9 +128,7 @@ export async function detectLocalNetworkAndRole(): Promise<DetectedNetworkInfo> 
 
       pc.createOffer()
         .then((offer) => pc.setLocalDescription(offer))
-        .catch(() => {
-          // Handled by timeout
-        });
+        .catch(() => {});
     } catch {
       // Handled by timeout
     }

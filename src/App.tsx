@@ -1,29 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
 import {
   Radio,
   Video,
-  Network,
-  Download,
-  Share2,
+  Navigation,
+  MessageSquare,
+  Cast,
   Settings,
-  Info,
-  CheckCircle2,
+  ShieldCheck,
   Zap,
   Volume2,
-  QrCode,
-  FileCode,
-  Cast,
-  Cpu,
-  Power,
-  ShieldCheck,
-  Smartphone
+  Lock,
+  Download,
+  Terminal,
+  Activity,
+  User,
+  Power
 } from 'lucide-react';
-import { AppTab, PeerDevice, UserProfile, ChatMessage, SharedFile, ThemeMode } from './types';
+import { AppTab, PeerDevice, UserProfile, ThemeMode, ChatMessage, SharedFile } from './types';
 import { TopSegmentedBar } from './components/TopSegmentedBar';
 import { WalkieTalkieTab } from './components/WalkieTalkieTab';
-import { CctvMonitorTab } from './components/CctvMonitorTab';
 import { RadarCompassTab } from './components/RadarCompassTab';
+import { CctvMonitorTab } from './components/CctvMonitorTab';
 import { LocalAirDropTab } from './components/LocalAirDropTab';
 import { ScreenMirrorTab } from './components/ScreenMirrorTab';
 import { SettingsScreenTab } from './components/SettingsScreenTab';
@@ -32,7 +29,8 @@ import { ArchitectureModal } from './components/ArchitectureModal';
 import { QRConnectionModal } from './components/QRConnectionModal';
 import { ApkExportModal } from './components/ApkExportModal';
 import { backgroundService } from './utils/backgroundService';
-import { generatePythonSetupScript, generateBashSetupScript, triggerFileDownload } from './utils/projectGenerator';
+import { generatePythonSetupScript, triggerFileDownload } from './utils/projectGenerator';
+import { meshManager } from './utils/meshManager';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState<AppTab>('walkie');
@@ -88,13 +86,11 @@ export default function App() {
     if (saved) {
       try {
         return JSON.parse(saved);
-      } catch {
-        // Fall through to empty default
-      }
+      } catch {}
     }
     return {
       username: '',
-      role: 'client',
+      role: 'host',
       localIp: '192.168.1.104',
       networkSsid: 'شبکه محلی (Wi-Fi Local)',
       autoAcceptCctv: true,
@@ -107,6 +103,7 @@ export default function App() {
   const handleSaveProfile = async (updated: UserProfile, enableBgService: boolean = true) => {
     setProfile(updated);
     localStorage.setItem('netmaster_user_profile', JSON.stringify(updated));
+    meshManager.updateProfile(updated.username, updated.role, updated.localIp, 8888);
 
     if (enableBgService) {
       try {
@@ -118,12 +115,12 @@ export default function App() {
     }
   };
 
+  // Connected Peer Devices on Local Wi-Fi / Hotspot (Strictly from real MeshManager)
+  const [peers, setPeers] = useState<PeerDevice[]>(() => meshManager.getConnectedPeers());
+
   // Chat & File AirDrop State
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [files, setFiles] = useState<SharedFile[]>([]);
-
-  // Connected Peer Devices on Local Wi-Fi / Hotspot
-  const [peers, setPeers] = useState<PeerDevice[]>([]);
 
   // Active voice speaker
   const [activeSpeakerId, setActiveSpeakerId] = useState<string | null>(null);
@@ -133,6 +130,26 @@ export default function App() {
 
   // Background Camera (CCTV) active state
   const [isCameraStreaming, setIsCameraStreaming] = useState(false);
+
+  // Subscribe to MeshManager for Real PTT, Chat, Peers & States
+  useEffect(() => {
+    // Initial sync
+    setPeers(meshManager.getConnectedPeers());
+
+    const unsubscribe = meshManager.subscribe((event) => {
+      if (event.type === 'PEER_ADDED' || event.type === 'PEER_UPDATED' || event.type === 'PEER_REMOVED') {
+        setPeers(meshManager.getConnectedPeers());
+      }
+      if (event.type === 'CHAT_RECEIVED' && event.message) {
+        setMessages((prev) => [...prev, event.message]);
+      }
+      if (event.type === 'PTT_STATE') {
+        setActiveSpeakerId(event.isSpeaking ? event.senderId : null);
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   // Download automated project generator script
   const handleDownloadPythonScript = () => {
@@ -232,7 +249,7 @@ export default function App() {
               <RadarCompassTab
                 peers={peers}
                 profile={profile}
-                onKickPeer={(id) => setPeers((prev) => prev.filter((p) => p.id !== id))}
+                onKickPeer={(id) => meshManager.disconnectFromPeer(id)}
                 onToggleMutePeer={(id) =>
                   setPeers((prev) =>
                     prev.map((p) => (p.id === id ? { ...p, isMutedByHost: !p.isMutedByHost } : p))
@@ -254,8 +271,9 @@ export default function App() {
                 activeSpeakerId={activeSpeakerId}
                 isDark={isDark}
                 onSetActiveSpeaker={(id) => setActiveSpeakerId(id)}
-                onAddCustomPeer={(peer) => setPeers((prev) => [peer, ...prev])}
-                onClearPeers={() => setPeers([])}
+                onClearPeers={() => {
+                  peers.forEach((p) => meshManager.disconnectFromPeer(p.id));
+                }}
               />
             </div>
 
@@ -285,17 +303,16 @@ export default function App() {
                 files={files}
                 isDark={isDark}
                 onSendMessage={(text) => {
-                  setMessages((prev) => [
-                    ...prev,
-                    {
-                      id: `msg-${Date.now()}`,
-                      senderId: 'me',
-                      senderName: profile.username || 'من',
-                      senderRole: profile.role,
-                      text,
-                      timestamp: Date.now(),
-                    },
-                  ]);
+                  const newMsg: ChatMessage = {
+                    id: `msg-${Date.now()}`,
+                    senderId: 'me',
+                    senderName: profile.username || 'من',
+                    senderRole: profile.role,
+                    text,
+                    timestamp: Date.now(),
+                  };
+                  setMessages((prev) => [...prev, newMsg]);
+                  meshManager.sendChatMessage(text);
                 }}
                 onShareFile={(sharedFile) => {
                   setFiles((prev) => [sharedFile, ...prev]);
@@ -355,39 +372,6 @@ export default function App() {
         hostPort={8888}
         hostName={profile.username}
         isDark={isDark}
-        onAddPeer={(newPeer) => {
-          setPeers((prev) => {
-            const exists = prev.some((p) => p.ip === newPeer.ip);
-            if (exists) return prev;
-            return [newPeer, ...prev];
-          });
-        }}
-        onConnectToScannedHost={(ip, port, name) => {
-          setPeers((prev) => {
-            const exists = prev.some((p) => p.ip === ip);
-            if (exists) return prev;
-            return [
-              {
-                id: `peer-${Date.now()}`,
-                name,
-                ip,
-                port,
-                battery: 100,
-                rssi: -45,
-                isOnline: true,
-                isTalking: false,
-                role: 'client',
-                cameraAvailable: true,
-                isStreamingCamera: false,
-                cameraFacing: 'back',
-                torchActive: false,
-                streamFps: 30,
-                lastSeen: Date.now(),
-              },
-              ...prev,
-            ];
-          });
-        }}
       />
 
       {/* Direct APK Build & Install Guide Modal */}
